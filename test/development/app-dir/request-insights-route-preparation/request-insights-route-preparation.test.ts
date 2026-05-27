@@ -24,7 +24,6 @@ describe('request-insights-route-preparation', () => {
   }
 
   const routePreparationSpanType = 'DevRouteMatcherManager.ensureRoute'
-  const matcherReloadSpanType = 'DevRouteMatcherManager.reloadMatchers'
 
   async function getRequestInsights() {
     return (await next
@@ -63,10 +62,6 @@ describe('request-insights-route-preparation', () => {
           insight.spans.some(
             (span) =>
               span.attributes?.['next.span_type'] === routePreparationSpanType
-          ) &&
-          insight.spans.some(
-            (span) =>
-              span.attributes?.['next.span_type'] === matcherReloadSpanType
           )
       )
 
@@ -89,57 +84,40 @@ describe('request-insights-route-preparation', () => {
     const routePreparationSpans = request.spans.filter(
       (span) => span.attributes?.['next.span_type'] === routePreparationSpanType
     )
-    const matcherReloadSpans = request.spans.filter(
-      (span) => span.attributes?.['next.span_type'] === matcherReloadSpanType
-    )
 
     expect(rootSpan?.spanId).toBeDefined()
     expect(rootSpan?.traceId).toBeDefined()
     expect(routePreparationSpans).toHaveLength(1)
-    expect(matcherReloadSpans).toHaveLength(1)
-    expect(routePreparationSpans[0].spanId).toBeDefined()
-    expect(matcherReloadSpans[0].spanId).toBeDefined()
-    expect(matcherReloadSpans[0].spanId).not.toBe(
-      routePreparationSpans[0].spanId
+    const routePreparationSpan = routePreparationSpans[0]
+    expect(routePreparationSpan).toEqual(
+      expect.objectContaining({
+        name: 'prepare route',
+        durationMs: expect.any(Number),
+        status: 'ok',
+        attributes: {
+          'next.span_category': 'nextjs',
+          'next.span_name': 'prepare route',
+          'next.span_type': routePreparationSpanType,
+        },
+      })
     )
-    expect(matcherReloadSpans[0].parentSpanId).toBe(
-      routePreparationSpans[0].parentSpanId
-    )
+    expect(Number.isFinite(routePreparationSpan.durationMs)).toBe(true)
+    expect(routePreparationSpan.durationMs).toBeGreaterThanOrEqual(0)
+    expect(routePreparationSpan.traceId).toBe(rootSpan?.traceId)
 
-    for (const [span, name, type] of [
-      [routePreparationSpans[0], 'prepare route', routePreparationSpanType],
-      [matcherReloadSpans[0], 'reload route matchers', matcherReloadSpanType],
-    ] as const) {
-      expect(span).toEqual(
-        expect.objectContaining({
-          name,
-          durationMs: expect.any(Number),
-          status: 'ok',
-          attributes: {
-            'next.span_category': 'nextjs',
-            'next.span_name': name,
-            'next.span_type': type,
-          },
-        })
-      )
-      expect(Number.isFinite(span.durationMs)).toBe(true)
-      expect(span.durationMs).toBeGreaterThanOrEqual(0)
-      expect(span.traceId).toBe(rootSpan?.traceId)
-
-      let ancestor = span.parentSpanId
-        ? spanById.get(span.parentSpanId)
-        : undefined
-      const visited = new Set<string>()
-      while (
-        ancestor?.spanId !== rootSpan?.spanId &&
-        ancestor?.parentSpanId &&
-        !visited.has(ancestor.parentSpanId)
-      ) {
-        visited.add(ancestor.parentSpanId)
-        ancestor = spanById.get(ancestor.parentSpanId)
-      }
-      expect(ancestor?.spanId).toBe(rootSpan?.spanId)
+    let ancestor = routePreparationSpan.parentSpanId
+      ? spanById.get(routePreparationSpan.parentSpanId)
+      : undefined
+    const visited = new Set<string>()
+    while (
+      ancestor?.spanId !== rootSpan?.spanId &&
+      ancestor?.parentSpanId &&
+      !visited.has(ancestor.parentSpanId)
+    ) {
+      visited.add(ancestor.parentSpanId)
+      ancestor = spanById.get(ancestor.parentSpanId)
     }
+    expect(ancestor?.spanId).toBe(rootSpan?.spanId)
   }
 
   it('records route preparation for first and subsequent App Page requests', async () => {
