@@ -64,10 +64,10 @@ import {
   type StartChangeSubscription,
 } from './turbopack-utils'
 import {
-  propagateServerField,
-  type ServerFields,
   type SetupOpts,
+  updateDevServerState,
 } from '../lib/router-utils/setup-dev-bundler'
+import type { DevServerState } from './dev-server-state'
 import { TurbopackManifestLoader } from '../../shared/lib/turbopack/manifest-loader'
 import { findPagePathData } from './on-demand-entry-handler'
 import type { RouteDefinition } from '../route-definitions/route-definition'
@@ -360,7 +360,7 @@ function getSourceMapURLFromTurbopack(
 
 export async function createHotReloaderTurbopack(
   opts: SetupOpts & { isSrcDir: boolean },
-  serverFields: ServerFields,
+  devServerState: DevServerState,
   distDir: string,
   resetFetch: () => void,
   lockfile: Lockfile | undefined,
@@ -1072,14 +1072,17 @@ export async function createHotReloaderTurbopack(
             ...clientsByHtmlRequestId.values(),
           ],
           clientStates,
-          serverFields,
 
           hooks: {
             handleWrittenEndpoint: (id, result, forceDeleteCache) => {
               currentWrittenEntrypoints.set(id, result)
               return clearRequireCache(id, result, { force: forceDeleteCache })
             },
-            propagateServerField: propagateServerField.bind(null, opts),
+            updateDevServerState: updateDevServerState.bind(
+              null,
+              opts,
+              devServerState
+            ),
             sendHmr,
             startBuilding,
             subscribeToChanges: subscribeToClientChanges,

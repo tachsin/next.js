@@ -1469,5 +1469,7 @@
   "1468": "Missing workUnitStore in createComponentTree",
   "1469": "The payload's transport tree is missing a slot that exists in the loader tree: %s",
   "1470": "Invariant: no direct app page entry found for %s",
-  "1471": "Invariant: dev virtual filesystem item was not handled by the development bundler"
+  "1471": "Invariant: dev virtual filesystem item was not handled by the development bundler",
+  "1472": "Invariant: dev server state can only be updated in dev",
+  "1473": "Invariant: no app initialized"
 }
