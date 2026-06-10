@@ -40,7 +40,6 @@ import {
   PAGES_MANIFEST,
   BUILD_ID_FILE,
   MIDDLEWARE_MANIFEST,
-  PREFETCH_HINTS,
   PRERENDER_MANIFEST,
   ROUTES_MANIFEST,
   CLIENT_PUBLIC_FILES_PATH,
@@ -116,7 +115,6 @@ import { formatDynamicImportPath } from '../lib/format-dynamic-import-path'
 import type { NextFontManifest } from '../build/webpack/plugins/next-font-manifest-plugin'
 import { isInterceptionRouteRewrite } from '../lib/is-interception-route-rewrite'
 import type { ServerOnInstrumentationRequestError } from './app-render/types'
-import type { PrefetchHints } from '../shared/lib/app-router-types'
 import { RouteKind } from './route-kind'
 import { InvariantError } from '../shared/lib/invariant-error'
 import { AwaiterOnce } from './after/awaiter'
@@ -207,10 +205,6 @@ export default class NextNodeServer extends BaseServer<
     this.routerServerHandler = options.routerServerHandler
     installGlobalBehaviors(this.nextConfig)
 
-    // Load prefetch hints from the build output. This must happen before
-    // any render to ensure segment inlining decisions are available.
-    this.renderOpts.prefetchHints = this.getPrefetchHints()
-
     const isDev = options.dev ?? false
     this.isDev = isDev
     this.sriEnabled = Boolean(options.conf.experimental?.sri?.algorithm)
@@ -220,10 +214,10 @@ export default class NextNodeServer extends BaseServer<
      * Using this from process.env allows targeting SSR by calling
      * `process.env.__NEXT_OPTIMIZE_CSS`.
      */
-    if (this.renderOpts.optimizeCss) {
+    if (this.serverRenderConfig.optimizeCss) {
       process.env.__NEXT_OPTIMIZE_CSS = JSON.stringify(true)
     }
-    if (this.renderOpts.nextScriptWorkers) {
+    if (this.serverRenderConfig.nextScriptWorkers) {
       process.env.__NEXT_SCRIPT_WORKERS = JSON.stringify(true)
     }
     if (
@@ -291,7 +285,7 @@ export default class NextNodeServer extends BaseServer<
 
     // when using compile mode static env isn't inlined so we
     // need to populate in normal runtime env
-    if (this.renderOpts.isExperimentalCompile) {
+    if (this.serverRenderConfig.isExperimentalCompile) {
       // supportsImmutableAssets only works with Turbopack, and `isExperimentalCompile` isn't supported
       // with that anyway, so we can assign just use deploymentId here
       populateStaticEnv(this.nextConfig, this.deploymentId || '')
@@ -825,7 +819,7 @@ export default class NextNodeServer extends BaseServer<
             req: ctx.req,
             res: ctx.res,
             query: ctx.query,
-            params: ctx.renderOpts.params,
+            params: ctx.renderState.params,
             page,
             appPaths,
           })
@@ -925,7 +919,7 @@ export default class NextNodeServer extends BaseServer<
         return {
           components,
           query: {
-            ...(!this.renderOpts.isExperimentalCompile &&
+            ...(!this.serverRenderConfig.isExperimentalCompile &&
             components.getStaticProps
               ? {}
               : query),
@@ -1729,7 +1723,7 @@ export default class NextNodeServer extends BaseServer<
     if (
       checkIsOnDemandRevalidate(
         params.request.headers,
-        this.renderOpts.previewProps
+        this.serverRenderConfig.previewProps
       ).isOnDemandRevalidate
     ) {
       return {
@@ -2020,28 +2014,6 @@ export default class NextNodeServer extends BaseServer<
     )
 
     return this._cachedPreviewManifest
-  }
-
-  private _cachedPrefetchHints: Record<string, PrefetchHints> | undefined
-  protected getPrefetchHints(): Record<string, PrefetchHints> {
-    if (this._cachedPrefetchHints) {
-      return this._cachedPrefetchHints
-    }
-
-    this._cachedPrefetchHints =
-      loadManifest<Record<string, PrefetchHints>>(
-        join(
-          /* turbopackIgnore: true */ this.distDir,
-          SERVER_DIRECTORY,
-          PREFETCH_HINTS
-        ),
-        true,
-        undefined,
-        false,
-        true // handleMissing: don't crash if the file doesn't exist
-      ) ?? {}
-
-    return this._cachedPrefetchHints
   }
 
   protected getRoutesManifest(): NormalizedRouteManifest | undefined {
