@@ -120,9 +120,9 @@ A suite with no lazy gate never resolves a config, so the cost is zero.
   JSDoc block. Reword prose comments that start with `@gate`.
 - A `describe`-level gate does not reach `it.each` tests (they bypass the
   `it` wrapper).
-- Jest-level timeouts are not invertible. A gated-false body that *hangs* rather
-  than throwing is killed by Jest and fails anyway. In practice `createRouterAct`
-  and Playwright reject rather than hang.
+- Jest-level timeouts are not invertible. A gated-false body that *stalls* rather
+  than throwing is stopped by Jest at the framework level and fails anyway. In
+  practice `createRouterAct` and Playwright fail fast instead of stalling.
 - Only the test body is gated. A failure from an `afterEach` (e.g. the redbox
   matchers) still fails the test.
 - `jest.retryTimes(1)` is on for non-dev CI. A stale gate fails deterministically
