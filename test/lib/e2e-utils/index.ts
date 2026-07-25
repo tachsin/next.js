@@ -7,6 +7,7 @@ import { NextDevInstance } from '../next-modes/next-dev'
 import { NextStartInstance } from '../next-modes/next-start'
 import { NextDeployInstance } from '../next-modes/next-deploy'
 import { shouldUseTurbopack } from '../next-test-utils'
+import { setGateTestContext, type GateTestMode } from '../gate/test-context'
 
 export type { NextInstance }
 export type { Playwright } from '../browsers/playwright'
@@ -176,6 +177,19 @@ export const itTurbopack =
  */
 export const isReact18 =
   parseInt(process.env.NEXT_TEST_REACT_VERSION || '', 10) === 18
+
+// Publish the statically-known shape of this run for `// @gate` pragmas. See
+// test/lib/gate/conditions.ts.
+setGateTestContext({
+  mode: testMode as GateTestMode,
+  bundler: isRspack
+    ? 'rspack'
+    : !isNextTestWasm && shouldUseTurbopack()
+      ? 'turbopack'
+      : 'webpack',
+  react18: isReact18,
+  wasm: isNextTestWasm,
+})
 
 if (!testMode) {
   throw new Error(
