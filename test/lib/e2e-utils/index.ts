@@ -8,6 +8,7 @@ import { NextStartInstance } from '../next-modes/next-start'
 import { NextDeployInstance } from '../next-modes/next-deploy'
 import { shouldUseTurbopack } from '../next-test-utils'
 import { setGateTestContext, type GateTestMode } from '../gate/test-context'
+import { clearFixture, registerFixture } from '../gate/state'
 
 export type { NextInstance }
 export type { Playwright } from '../browsers/playwright'
@@ -298,9 +299,16 @@ async function createNext(
 
       nextInstance.on('destroy', () => {
         nextInstance = undefined
+        clearFixture()
       })
 
       await nextInstance.setup(rootSpan)
+
+      // Lazy `// @gate` conditions read this fixture's resolved next.config.
+      // Registering the instance (not a snapshot) before `start()` keeps
+      // `skipStart` suites and rebuild flows working: nothing is resolved until
+      // a gate actually asks. See test/lib/gate/README.md.
+      registerFixture(nextInstance)
 
       if (!opts.skipStart) {
         await rootSpan

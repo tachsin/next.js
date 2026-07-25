@@ -1,6 +1,7 @@
 import spawn from 'cross-spawn'
 import { Span } from 'next/dist/trace'
 import { NextInstance } from './base'
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants'
 import { retry, waitFor } from 'next-test-utils'
 import stripAnsi from 'strip-ansi'
 import { quote as shellQuote } from 'shell-quote'
@@ -10,6 +11,10 @@ export class NextDevInstance extends NextInstance {
 
   public get buildId() {
     return 'development'
+  }
+
+  protected get configPhase() {
+    return PHASE_DEVELOPMENT_SERVER
   }
 
   public async setup(parentSpan: Span) {
