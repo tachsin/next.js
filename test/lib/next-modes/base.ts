@@ -531,6 +531,33 @@ export class NextInstance {
       })
   }
 
+  /**
+   * The options every child process of this fixture is spawned with — its cwd,
+   * and the exact env `next build` / `next dev` / `next start` see.
+   *
+   * Anything that inspects the fixture out of process (e.g. resolving its
+   * `next.config`) has to use this env, because config resolution reads env
+   * vars from the calling process and a suite may pass its own via
+   * `nextTestSetup({ env })`.
+   */
+  protected getSpawnOpts(
+    env?: Record<string, string>
+  ): import('child_process').SpawnOptions {
+    return {
+      cwd: this.testDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+      env: {
+        ...process.env,
+        ...this.env,
+        ...env,
+        NODE_ENV: this.env.NODE_ENV || ('' as any),
+        PORT: this.forcedPort ?? '0',
+        __NEXT_TEST_MODE: 'e2e',
+      },
+    }
+  }
+
   protected setServerReadyTimeout(
     reject: (reason?: unknown) => void,
     ms: number
