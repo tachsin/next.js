@@ -43,7 +43,7 @@ type Token =
   | { type: 'boolean'; value: boolean }
   | { type: '&&' | '||' | '==' | '!=' | '!' | '(' | ')' }
 
-const NAME_RE = /[a-zA-Z_$][0-9a-zA-Z_$.]*/y
+const NAME_RE = /[a-zA-Z_$][0-9a-zA-Z_$]*/y
 
 function tokenize(source: string): Token[] {
   const tokens: Token[] = []

@@ -46,10 +46,6 @@ describe('@gate expression language', () => {
     expect(parse("mode === 'dev'").names).toEqual(['mode'])
   })
 
-  it('accepts dotted names for disambiguation', () => {
-    expect(parse('experimental.ppr').names).toEqual(['experimental.ppr'])
-  })
-
   it.each([
     ['', 'Unexpected end of expression'],
     ['a &&', 'Unexpected end of expression'],
