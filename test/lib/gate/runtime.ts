@@ -24,6 +24,15 @@
  * known at collection time; lazy ones are read from the booted fixture's
  * resolved config the first time a gate asks, which is why a gate can only be
  * decided inside the test body.
+ *
+ * ## `@force-gate`
+ *
+ * `// @force-gate <condition>` skips the test for real (`○ skipped`) when the
+ * condition is false. That requires a decision at collection time, so it only
+ * accepts static conditions, and it gives up the stale-gate tripwire entirely.
+ * Prefer `@gate`; reach for `@force-gate` only when running the body is
+ * impossible rather than merely failing — dev mode has no build output, deploy
+ * mode cannot touch the filesystem.
  */
 
 import { evaluate, parse, type ExprNode } from './expr'
@@ -82,20 +91,23 @@ function parseGate(pragma: GatePragma): Gate {
     )
   }
 
-  const needsResolvedConfig = parsed.names.some(
+  const lazyNames = parsed.names.filter(
     (name) => getCondition(name).kind === 'lazy'
   )
 
-  if (pragma.force) {
-    // Implemented in a follow-up commit: a real Jest skip has to be decided at
-    // collection time, which means static conditions only.
+  if (pragma.force && lazyNames.length > 0) {
     throw new Error(
-      `\`// @force-gate ${pragma.source}\` is not supported yet. Use ` +
-        `\`// @gate ${pragma.source}\`.`
+      `\`@force-gate\` produces a real Jest skip, which has to be decided ` +
+        `while tests are being collected, so it only accepts conditions that ` +
+        `are known up front. "${lazyNames[0]}" is resolved lazily from the ` +
+        `running Next.js fixture's config.\n\n` +
+        `Use \`// @gate ${pragma.source}\` instead — it runs the test and ` +
+        `tells you when the gate goes stale — or gate on a static condition ` +
+        `such as \`dev\` or \`turbopack\`.`
     )
   }
 
-  return { ...pragma, ...parsed, needsResolvedConfig }
+  return { ...pragma, ...parsed, needsResolvedConfig: lazyNames.length > 0 }
 }
 
 function readCondition(name: string, config?: ResolvedNextConfig): unknown {
@@ -191,14 +203,37 @@ function resolveTestFn(kind: string): TestFn {
   }
 }
 
+/** The `.skip` counterpart of `resolveTestFn`, for a false `@force-gate`. */
+function resolveSkipFn(kind: string): TestFn {
+  const g = global as any
+  if (kind.startsWith('describe')) return g.describe.skip
+  if (kind.startsWith('test')) return g.test.skip
+  return g.it.skip
+}
+
 export function _test_gate(pragmas: GatePragma[], kind: string) {
   // Parsing and validation happen while the test file is being collected, so a
   // typo'd condition fails the whole suite instead of one test.
-  const gates = pragmas.map(parseGate)
+  const allGates = pragmas.map(parseGate)
+  const forceGates = allGates.filter((gate) => gate.force)
+  const gates = allGates.filter((gate) => !gate.force)
   const isDescribe = kind.startsWith('describe')
   const testFn = resolveTestFn(kind)
 
   return function gated(name: string, callback: Function, timeout?: number) {
+    // `@force-gate` is static-only, so it can be decided right here, while the
+    // file is being collected. False means a real Jest skip.
+    const forcedOff = forceGates.find(
+      (gate) => !evaluate(gate.node, (condition) => readCondition(condition))
+    )
+    if (forcedOff) {
+      return resolveSkipFn(kind)(
+        name,
+        callback as jest.ProvidesCallback,
+        timeout
+      )
+    }
+
     if (isDescribe) {
       // Register the `describe` normally, but make its gates visible while its
       // body is collected so nested tests inherit them.

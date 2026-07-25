@@ -1,4 +1,4 @@
-import { __testing, expectTestToFail } from '../../lib/gate/runtime'
+import { __testing, _test_gate, expectTestToFail } from '../../lib/gate/runtime'
 import {
   clearGateTestContext,
   setGateTestContext,
@@ -15,6 +15,36 @@ const runGated = (sources: string[], body: () => unknown) => {
     body
   )
   return (wrapped as () => Promise<void>)()
+}
+
+type FakeTestFn = jest.Mock & { skip: jest.Mock; only: jest.Mock }
+
+const makeFakeTestFn = (): FakeTestFn =>
+  Object.assign(jest.fn(), { skip: jest.fn(), only: jest.fn() }) as FakeTestFn
+
+/**
+ * Swaps `global.it` / `global.test` / `global.describe` for spies while `fn`
+ * runs, so `_test_gate`'s registration decisions can be observed without
+ * actually registering tests.
+ */
+const withFakeTestGlobals = (fn: () => void) => {
+  const fakes = {
+    it: makeFakeTestFn(),
+    test: makeFakeTestFn(),
+    describe: makeFakeTestFn(),
+  }
+  const originals = {
+    it: global.it,
+    test: global.test,
+    describe: global.describe,
+  }
+  Object.assign(global, fakes)
+  try {
+    fn()
+  } finally {
+    Object.assign(global, originals)
+  }
+  return fakes
 }
 
 const fixtureWith = (config: Record<string, unknown>) => {
@@ -151,12 +181,95 @@ describe('@gate runtime', () => {
     })
   })
 
+  describe('@force-gate', () => {
+    it('only accepts statically-known conditions', () => {
+      expect(() => parseGate('!cacheComponents', true)).toThrow(
+        '`@force-gate` produces a real Jest skip'
+      )
+      expect(() => parseGate('!cacheComponents', true)).toThrow(
+        'Use `// @gate !cacheComponents` instead'
+      )
+    })
+
+    it('accepts a static condition', () => {
+      expect(parseGate('!dev', true).force).toBe(true)
+    })
+
+    it('skips the test for real when the condition is false', () => {
+      const body = () => {}
+      const fakes = withFakeTestGlobals(() => {
+        _test_gate([{ force: true, source: 'dev' }], 'it')('a test', body)
+      })
+      expect(fakes.it.skip).toHaveBeenCalledWith('a test', body, undefined)
+      expect(fakes.it).not.toHaveBeenCalled()
+    })
+
+    it('registers the test normally when the condition holds', () => {
+      const fakes = withFakeTestGlobals(() => {
+        _test_gate([{ force: true, source: '!dev' }], 'it')('a test', () => {})
+      })
+      expect(fakes.it).toHaveBeenCalledTimes(1)
+      expect(fakes.it.skip).not.toHaveBeenCalled()
+    })
+
+    it('skips a whole describe with describe.skip', () => {
+      const fakes = withFakeTestGlobals(() => {
+        _test_gate([{ force: true, source: 'dev' }], 'describe')(
+          'a suite',
+          () => {}
+        )
+      })
+      expect(fakes.describe.skip).toHaveBeenCalledWith(
+        'a suite',
+        expect.any(Function),
+        undefined
+      )
+      expect(fakes.describe).not.toHaveBeenCalled()
+    })
+
+    it('leaves a `@gate` on the same test in charge when it holds', async () => {
+      const fakes = withFakeTestGlobals(() => {
+        _test_gate(
+          [
+            { force: true, source: '!dev' },
+            { force: false, source: 'dev' },
+          ],
+          'it'
+        )('a test', () => {})
+      })
+      expect(fakes.it.skip).not.toHaveBeenCalled()
+      // The non-force gate is false, so the (passing) body is a stale gate.
+      const registered = fakes.it.mock.calls[0][1] as () => Promise<void>
+      await expect(registered()).rejects.toThrow(
+        'Gated test passed unexpectedly'
+      )
+    })
+  })
+
   describe('a static condition outside the e2e harness', () => {
     it('explains why it is unavailable', async () => {
       clearGateTestContext()
       await expect(runGated(['dev'], () => {})).rejects.toThrow(
         'no run context has been recorded'
       )
+    })
+  })
+
+  // The tests above drive the runtime's internals directly. These two go
+  // through the real pragma path — the transform rewrote them, and the `it` /
+  // `describe` globals installed by `installGate()` registered them. This file
+  // pretends the run mode is `start`, so `dev` is false and a failing body is
+  // absorbed. The stale-gate direction cannot be asserted from inside Jest (the
+  // whole point is that it fails the test); see test/lib/gate/README.md.
+  // @gate dev
+  it('absorbs a failure through the real pragma path', () => {
+    expect(1).toBe(2)
+  })
+
+  // @gate dev
+  describe('a gate on a describe', () => {
+    it('is inherited by a test that has no pragma of its own', () => {
+      expect(1).toBe(2)
     })
   })
 
