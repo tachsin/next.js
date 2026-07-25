@@ -2,14 +2,12 @@ import { nextTestSetup } from 'e2e-utils'
 import { createRouterAct } from 'router-act'
 import { waitFor } from 'next-test-utils'
 
+// Prefetching is disabled in dev, so none of this can even be attempted there.
+// @force-gate !dev
 describe('segment cache (basic tests)', () => {
-  const { next, isNextDev } = nextTestSetup({
+  const { next } = nextTestSetup({
     files: __dirname,
   })
-  if (isNextDev) {
-    test('ppr is disabled', () => {})
-    return
-  }
 
   it('preserves per-segment prefetching after a dynamic navigation', async () => {
     let act: ReturnType<typeof createRouterAct>
@@ -116,11 +114,12 @@ describe('segment cache (basic tests)', () => {
     )
   })
 
-  // TODO(cache-components): With `cacheComponents` enabled, this test is outdated, because
-  // we no longer put the param values in the prefetched RSC response. You'd have to opt into runtime
-  // prefetching for this test to pass until we ship the optimization that would mark this as fully static
-  // if you don't reference any dynamic params in the server components.
-  it.skip('navigate to page with lazily-generated (not at build time) static param', async () => {
+  // With `cacheComponents` enabled we no longer put the param values in the
+  // prefetched RSC response, so this needs runtime prefetching until we ship the
+  // optimization that marks a route as fully static when its Server Components
+  // don't reference any dynamic params. The gate fires the day that lands.
+  // @gate !cacheComponents
+  it('navigate to page with lazily-generated (not at build time) static param', async () => {
     let act: ReturnType<typeof createRouterAct>
     const browser = await next.browser('/lazily-generated-params', {
       beforePageLoad(page) {
