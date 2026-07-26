@@ -2,14 +2,12 @@ import { nextTestSetup } from 'e2e-utils'
 import type * as Playwright from 'playwright'
 import { createRouterAct } from 'router-act'
 
+// Prefetching is disabled in dev, so none of this can even be attempted there.
+// @force-gate !dev
 describe('segment cache prefetch scheduling', () => {
-  const { next, isNextDev } = nextTestSetup({
+  const { next } = nextTestSetup({
     files: __dirname,
   })
-  if (isNextDev) {
-    test('prefetching is disabled', () => {})
-    return
-  }
 
   it('increases the priority of a viewport-initiated prefetch on hover', async () => {
     let act: ReturnType<typeof createRouterAct>
@@ -90,7 +88,8 @@ describe('segment cache prefetch scheduling', () => {
   // fetched separately from the route tree. Need to rewrite to assert on
   // something that appears in the route tree and is relatively stable, like a
   // static route name.
-  it.skip('prioritizes prefetching the route trees before the segments', async () => {
+  // @gate TODO
+  it('prioritizes prefetching the route trees before the segments', async () => {
     let act: ReturnType<typeof createRouterAct>
     const browser = await next.browser('/cancellation', {
       beforePageLoad(p: Playwright.Page) {
