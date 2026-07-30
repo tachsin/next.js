@@ -121,6 +121,11 @@ export type RequestStoreInputs = {
   onUpdateCookies: ((cookies: string[]) => void) | undefined
   url: { pathname: string; search?: string }
   rootParams: Params
+  /**
+   * Resolved variant values, keyed by variant identity. Parsed once from the
+   * request (see `RequestMeta['variants']`) rather than re-derived here.
+   */
+  variants: Record<string, string>
   implicitTags: ImplicitTags
   resumeDataCache: ResumeDataCache | null
   previewProps: WrapperRenderOpts['previewProps']
@@ -173,6 +178,7 @@ export function createRequestStoreForRender(
   res: RequestContext['res'],
   url: RequestContext['url'],
   rootParams: Params,
+  variants: Record<string, string>,
   implicitTags: RequestContext['implicitTags'],
   onUpdateCookies: RenderOpts['onUpdateCookies'],
   previewProps: WrapperRenderOpts['previewProps'],
@@ -195,6 +201,7 @@ export function createRequestStoreForRender(
         : undefined),
     url,
     rootParams,
+    variants,
     implicitTags,
     resumeDataCache,
     previewProps,
@@ -220,6 +227,8 @@ export function createRequestStoreForAPI(
     onUpdateCookies,
     url,
     rootParams: {},
+    // Variants are not supported in Route Handlers yet, matching root params.
+    variants: {},
     implicitTags,
     resumeDataCache: null,
     previewProps,
@@ -244,6 +253,7 @@ export function createRequestStore(inputs: RequestStoreInputs): RequestStore {
     onUpdateCookies,
     url,
     rootParams,
+    variants,
     implicitTags,
     resumeDataCache,
     previewProps,
@@ -270,6 +280,7 @@ export function createRequestStore(inputs: RequestStoreInputs): RequestStore {
     // lets us avoid requiring an empty string for `search` in the type.
     url: { pathname: url.pathname, search: url.search ?? '' },
     rootParams,
+    variants,
     get headers() {
       if (!cache.headers) {
         // Seal the headers object that'll freeze out any methods that could
