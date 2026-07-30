@@ -125,7 +125,7 @@ export type RequestStoreInputs = {
    * Resolved variant values, keyed by variant identity. Parsed once from the
    * request (see `RequestMeta['variants']`) rather than re-derived here.
    */
-  variants: Record<string, string>
+  variants: Record<string, string> | null
   implicitTags: ImplicitTags
   resumeDataCache: ResumeDataCache | null
   previewProps: WrapperRenderOpts['previewProps']
@@ -178,7 +178,7 @@ export function createRequestStoreForRender(
   res: RequestContext['res'],
   url: RequestContext['url'],
   rootParams: Params,
-  variants: Record<string, string>,
+  variants: Record<string, string> | null,
   implicitTags: RequestContext['implicitTags'],
   onUpdateCookies: RenderOpts['onUpdateCookies'],
   previewProps: WrapperRenderOpts['previewProps'],
@@ -228,7 +228,7 @@ export function createRequestStoreForAPI(
     url,
     rootParams: {},
     // Variants are not supported in Route Handlers yet, matching root params.
-    variants: {},
+    variants: null,
     implicitTags,
     resumeDataCache: null,
     previewProps,
