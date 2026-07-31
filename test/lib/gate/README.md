@@ -39,22 +39,38 @@ including the expression grammar, so pragmas read the same in both repos.
 
 ## `@gate` vs `@force-gate`
 
-| | runs the body | reports staleness | conditions |
-| --- | --- | --- | --- |
-| `// @gate <cond>` | always | yes | static and lazy |
-| `// @force-gate <cond>` | only when true | no | static only |
+`@gate` **runs** the body and inverts the expectation when the condition is
+false (a passing body then fails as stale). `@force-gate` **skips** instead of
+running — for a body that can't be attempted at all, giving up the tripwire in
+exchange.
 
-`@force-gate` is a real Jest skip (`○ skipped`), which Jest can only decide while
-tests are being collected — hence static conditions only, and hence no
-tripwire.
+| directive | condition | when false | when true |
+| --- | --- | --- | --- |
+| `// @gate <cond>` | static or lazy | assert-fail (invert; stale if it passes) | run |
+| `// @force-gate <cond>` (static) | static | real Jest skip (`○ skipped`) at collection | run |
+| `// @force-gate <cond>` (lazy, per-test) | lazy | force-pass the test (skip the body) | run |
+| `// @force-gate <cond>` (lazy, on a `describe`) | lazy | skip the **build** and force-pass the suite | build + run |
+
+A **static** `@force-gate` (mode/bundler) is decided while tests are collected,
+so it's a real `○ skipped`. A **lazy** `@force-gate` (resolved-config) can't be
+known then, so it's decided at runtime once the fixture's config is resolvable:
+
+- On a `describe`, the fixture is set up but the **build is skipped** when the
+  condition is false — which is the point, since some fixtures can't build under
+  the condition at all (e.g. `revalidate` / `dynamic` route configs under Cache
+  Components). Nothing is asserted; every test force-passes.
+- Because Jest can't turn a running test into `○ skipped`, a lazy force-gate
+  reports the test as **passed with a `⚠ skipped by @force-gate <cond>` warning**,
+  not as skipped. A static force-gate keeps the real `○ skipped`.
 
 **Prefer `@gate`.** Reach for `@force-gate` only when running the body is
-impossible rather than merely failing: dev mode has no build output, deploy mode
-cannot read the filesystem.
+impossible rather than merely failing: prefetching is off in dev, deploy has no
+local build output, or the fixture can't build under the condition.
 
 Both forms work on `it`, `test`, `fit`, `describe`, and their `.only` variants.
 A gate on a `describe` applies to every test inside it. Several pragmas may stack
-on one call; every one of them has to hold.
+on one call. (Build-skipping applies only to suites where `nextTestSetup` owns
+the build — not `skipStart` suites — and to `start`/`dev`, not deploy.)
 
 ## Conditions
 

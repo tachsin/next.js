@@ -1,5 +1,11 @@
 import { nextTestSetup } from 'e2e-utils'
 
+// These routes use `revalidate` / `dynamic` route segment configs, which Cache
+// Components rejects at build time — the fixture can't build at all under it,
+// so there's nothing to assert. Skip the whole suite when Cache Components is
+// on, resolved from the fixture's config rather than an env var. Because this
+// is a lazy `@force-gate`, the build is skipped before it's even attempted.
+// @force-gate !cacheComponents
 describe('custom-cache-control', () => {
   const { next, isNextDev, isNextDeploy } = nextTestSetup({
     files: __dirname,
@@ -25,18 +31,14 @@ describe('custom-cache-control', () => {
       isNextDev ? 'no-cache, must-revalidate' : 's-maxage=31'
     )
   })
-  ;(process.env.__NEXT_CACHE_COMPONENTS ? it.skip : it)(
-    'should have default cache-control for app-ssg another',
-    async () => {
-      const res = await next.fetch('/app-ssg/another')
-      // eslint-disable-next-line jest/no-standalone-expect
-      expect(res.headers.get('cache-control')).toBe(
-        isNextDev
-          ? 'no-cache, must-revalidate'
-          : 's-maxage=120, stale-while-revalidate=31535880'
-      )
-    }
-  )
+  it('should have default cache-control for app-ssg another', async () => {
+    const res = await next.fetch('/app-ssg/another')
+    expect(res.headers.get('cache-control')).toBe(
+      isNextDev
+        ? 'no-cache, must-revalidate'
+        : 's-maxage=120, stale-while-revalidate=31535880'
+    )
+  })
 
   it('should have custom cache-control for app-ssr', async () => {
     const res = await next.fetch('/app-ssr')

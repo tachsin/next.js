@@ -9,6 +9,11 @@ import { NextDeployInstance } from '../next-modes/next-deploy'
 import { shouldUseTurbopack } from '../next-test-utils'
 import { setGateTestContext, type GateTestMode } from '../gate/test-context'
 import { clearFixture, registerFixture } from '../gate/state'
+import {
+  getActiveDescribeGates,
+  hasLazyForceGate,
+  findLazyForceSkip,
+} from '../gate/runtime'
 
 export type { NextInstance }
 export type { Playwright } from '../browsers/playwright'
@@ -360,10 +365,44 @@ export function nextTestSetup(
     }
   }
 
+  // A lazy `@force-gate` on the enclosing `describe` (e.g. `!cacheComponents`)
+  // gates the *build*, not just the test bodies: some fixtures can't build
+  // under the condition at all. Snapshot the describe's gates now, while the
+  // describe body is still being collected — the stack is empty by `beforeAll`.
+  // Suites that manage their own build (`skipStart`) are left untouched.
+  const describeGates = getActiveDescribeGates()
+  // Deploy's "build" is a remote deployment we can't gate this way, and suites
+  // that pass `skipStart` build manually — leave both to their own handling.
+  const buildForceGated =
+    !options.skipStart && !isNextDeploy && hasLazyForceGate(describeGates)
+
   let next: NextInstance | undefined
   if (!skipped) {
     beforeAll(async () => {
-      next = await createNext(options)
+      if (!buildForceGated) {
+        next = await createNext(options)
+        return
+      }
+      // Set the fixture up (so its config is resolvable) without building, then
+      // resolve the force-gate. If it's false, skip the build entirely — the
+      // inherited gate makes every test force-pass, so nothing touches `next`.
+      const instance = await createNext({ ...options, skipStart: true })
+      next = instance
+      const config = await instance.getResolvedConfig()
+      const forceSkip = findLazyForceSkip(describeGates, config)
+      if (forceSkip) {
+        require('console').warn(
+          `  ⚠ suite build skipped by \`@force-gate ${forceSkip.source}\``
+        )
+        return
+      }
+      try {
+        await instance.start()
+      } catch (err) {
+        await instance.destroy().catch(() => {})
+        next = undefined
+        throw err
+      }
     })
     afterAll(async () => {
       // Gracefully destroy the instance if `createNext` success.

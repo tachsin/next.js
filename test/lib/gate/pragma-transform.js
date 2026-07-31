@@ -82,7 +82,9 @@ function getLineNumber(lineStarts, offset) {
  * @returns {string}
  */
 function rewrite(src, filename) {
-  if (!src.includes('@gate')) return src
+  // Cheap bail-out for the ~2000 files with no pragma. `@force-gate` does not
+  // contain the substring `@gate`, so both spellings have to be checked.
+  if (!src.includes('@gate') && !src.includes('@force-gate')) return src
 
   const lineStarts = getLineStarts(src)
   /** @type {Set<number>} 1-based line numbers consumed by a match */

@@ -182,17 +182,16 @@ describe('@gate runtime', () => {
   })
 
   describe('@force-gate', () => {
-    it('only accepts statically-known conditions', () => {
-      expect(() => parseGate('!cacheComponents', true)).toThrow(
-        '`@force-gate` produces a real Jest skip'
-      )
-      expect(() => parseGate('!cacheComponents', true)).toThrow(
-        'Use `// @gate !cacheComponents` instead'
-      )
+    it('accepts a lazy condition, classified for runtime resolution', () => {
+      const gate = parseGate('!cacheComponents', true)
+      expect(gate.force).toBe(true)
+      expect(gate.needsResolvedConfig).toBe(true)
     })
 
-    it('accepts a static condition', () => {
-      expect(parseGate('!dev', true).force).toBe(true)
+    it('accepts a static condition, decided at collection', () => {
+      const gate = parseGate('!dev', true)
+      expect(gate.force).toBe(true)
+      expect(gate.needsResolvedConfig).toBe(false)
     })
 
     it('skips the test for real when the condition is false', () => {
@@ -243,6 +242,31 @@ describe('@gate runtime', () => {
       await expect(registered()).rejects.toThrow(
         'Gated test passed unexpectedly'
       )
+    })
+
+    it('force-passes a lazy force-gate whose condition is false', async () => {
+      fixtureWith({ cacheComponents: true }) // `!cacheComponents` is false
+      const body = jest.fn()
+      const wrapped = __testing.wrapGatedBody(
+        [parseGate('!cacheComponents', true)],
+        body
+      )
+      await (wrapped as () => Promise<void>)()
+      expect(body).not.toHaveBeenCalled()
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('skipped by `@force-gate !cacheComponents`')
+      )
+    })
+
+    it('runs the body when a lazy force-gate condition holds', async () => {
+      fixtureWith({ cacheComponents: false }) // `!cacheComponents` is true
+      const body = jest.fn()
+      const wrapped = __testing.wrapGatedBody(
+        [parseGate('!cacheComponents', true)],
+        body
+      )
+      await (wrapped as () => Promise<void>)()
+      expect(body).toHaveBeenCalled()
     })
   })
 

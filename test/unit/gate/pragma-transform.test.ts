@@ -59,6 +59,19 @@ describe('@gate pragma transform', () => {
     )
   })
 
+  it('rewrites a `@force-gate`-only file (no `@gate` substring)', () => {
+    // Guards the cheap bail-out: `@force-gate` does not contain `@gate`.
+    const input = src(
+      '// @force-gate !cacheComponents',
+      "describe('s', () => {})"
+    )
+    expect(input.includes('@gate')).toBe(false)
+    const out = rewrite(input, 'x.test.ts')
+    expect(out.split('\n')[1]).toBe(
+      `_test_gate([{"force":true,"source":"!cacheComponents"}],"describe")('s', () => {})`
+    )
+  })
+
   it.each([
     ['it', 'it'],
     ['test', 'test'],

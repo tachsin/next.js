@@ -46,7 +46,7 @@ export type GatePragma = {
   source: string
 }
 
-type Gate = GatePragma & {
+export type Gate = GatePragma & {
   node: ExprNode
   names: string[]
   /** True when any referenced condition has to be read off the fixture. */
@@ -95,18 +95,11 @@ function parseGate(pragma: GatePragma): Gate {
     (name) => getCondition(name).kind === 'lazy'
   )
 
-  if (pragma.force && lazyNames.length > 0) {
-    throw new Error(
-      `\`@force-gate\` produces a real Jest skip, which has to be decided ` +
-        `while tests are being collected, so it only accepts conditions that ` +
-        `are known up front. "${lazyNames[0]}" is resolved lazily from the ` +
-        `running Next.js fixture's config.\n\n` +
-        `Use \`// @gate ${pragma.source}\` instead — it runs the test and ` +
-        `tells you when the gate goes stale — or gate on a static condition ` +
-        `such as \`dev\` or \`turbopack\`.`
-    )
-  }
-
+  // `needsResolvedConfig` also classifies a `@force-gate`. A static force-gate
+  // (mode/bundler) is decided while tests are collected — a real Jest skip. A
+  // *lazy* force-gate can't be known then, so it is decided at runtime once the
+  // fixture's config is resolvable: it force-passes the test (and, on a
+  // `describe`, skips the build) rather than emitting a collection-time skip.
   return { ...pragma, ...parsed, needsResolvedConfig: lazyNames.length > 0 }
 }
 
@@ -120,18 +113,38 @@ function readCondition(name: string, config?: ResolvedNextConfig): unknown {
   return condition.value(config)
 }
 
-/** The first gate whose condition is false, or `null` if all of them hold. */
-async function findFailingGate(gates: Gate[]): Promise<Gate | null> {
+type GateDecision =
+  | { type: 'run' }
+  | { type: 'force-pass'; gate: Gate }
+  | { type: 'invert'; gate: Gate }
+
+/**
+ * Decides what to do with a test, given the gates that apply to it. Resolves
+ * the fixture config once if any gate needs it.
+ *
+ * A false `@force-gate` skips the test (force-pass) and takes precedence over
+ * an inverted `@gate` on the same test — you can't assert-fail a test you're
+ * skipping. Otherwise the first false `@gate` inverts the expectation, and if
+ * every gate holds the test runs normally.
+ */
+async function decideGates(gates: Gate[]): Promise<GateDecision> {
   let config: ResolvedNextConfig | undefined
   if (gates.some((gate) => gate.needsResolvedConfig)) {
     config = await getResolvedConfigForGates()
   }
+  const read = (name: string) => readCondition(name, config)
+
   for (const gate of gates) {
-    if (!evaluate(gate.node, (name) => readCondition(name, config))) {
-      return gate
+    if (gate.force && !evaluate(gate.node, read)) {
+      return { type: 'force-pass', gate }
     }
   }
-  return null
+  for (const gate of gates) {
+    if (!gate.force && !evaluate(gate.node, read)) {
+      return { type: 'invert', gate }
+    }
+  }
+  return { type: 'run' }
 }
 
 /**
@@ -163,17 +176,29 @@ function wrapGatedBody(
   }
 
   const body = async function gatedBody(this: unknown): Promise<void> {
-    const failing = await findFailingGate(gates)
-    if (!failing) {
+    const decision = await decideGates(gates)
+
+    if (decision.type === 'run') {
       await callback.call(this)
       return
     }
 
-    const error = new Error(staleGateMessage(failing))
+    if (decision.type === 'force-pass') {
+      // A lazy `@force-gate` whose condition is false: the test can't be
+      // attempted here, so skip the body and report a pass. Jest can't turn a
+      // running test into `○ skipped`, so this shows as passed — the warning is
+      // the signal. A *static* force-gate never reaches here; it is a real skip.
+      require('console').warn(
+        `  ⚠ skipped by \`@force-gate ${decision.gate.source}\``
+      )
+      return
+    }
+
+    const error = new Error(staleGateMessage(decision.gate))
     Error.captureStackTrace(error, body)
     await expectTestToFail(() => callback.call(this), error)
     require('console').warn(
-      `  ⚠ gated test failed as expected (@gate ${failing.source})`
+      `  ⚠ gated test failed as expected (@gate ${decision.gate.source})`
     )
   }
 
@@ -215,15 +240,21 @@ export function _test_gate(pragmas: GatePragma[], kind: string) {
   // Parsing and validation happen while the test file is being collected, so a
   // typo'd condition fails the whole suite instead of one test.
   const allGates = pragmas.map(parseGate)
-  const forceGates = allGates.filter((gate) => gate.force)
-  const gates = allGates.filter((gate) => !gate.force)
+  // A static `@force-gate` is decided at collection time (a real Jest skip).
+  // Everything else — `@gate`, and *lazy* `@force-gate` — is resolved at
+  // runtime, so it inherits down into the tests via the describe stack.
+  const staticForceGates = allGates.filter(
+    (gate) => gate.force && !gate.needsResolvedConfig
+  )
+  const runtimeGates = allGates.filter(
+    (gate) => !gate.force || gate.needsResolvedConfig
+  )
   const isDescribe = kind.startsWith('describe')
   const testFn = resolveTestFn(kind)
 
   return function gated(name: string, callback: Function, timeout?: number) {
-    // `@force-gate` is static-only, so it can be decided right here, while the
-    // file is being collected. False means a real Jest skip.
-    const forcedOff = forceGates.find(
+    // A false static `@force-gate` is a real Jest skip, decided right here.
+    const forcedOff = staticForceGates.find(
       (gate) => !evaluate(gate.node, (condition) => readCondition(condition))
     )
     if (forcedOff) {
@@ -235,21 +266,58 @@ export function _test_gate(pragmas: GatePragma[], kind: string) {
     }
 
     if (isDescribe) {
-      // Register the `describe` normally, but make its gates visible while its
-      // body is collected so nested tests inherit them.
+      // Register the `describe` normally, but make its runtime gates (including
+      // a lazy `@force-gate`) visible while its body is collected so nested
+      // tests inherit them and `nextTestSetup` can gate the build.
       return testFn(name, function (this: unknown) {
-        describeGateStack.push(...gates)
+        describeGateStack.push(...runtimeGates)
         try {
           return callback.call(this)
         } finally {
-          describeGateStack.length -= gates.length
+          describeGateStack.length -= runtimeGates.length
         }
       } as jest.ProvidesCallback)
     }
 
-    const applicable = [...describeGateStack, ...gates]
+    const applicable = [...describeGateStack, ...runtimeGates]
     return testFn(name, wrapGatedBody(applicable, callback), timeout)
   }
+}
+
+/**
+ * A snapshot of the gates on the enclosing `describe`(s), taken while the
+ * describe body is being collected. `nextTestSetup` reads this synchronously to
+ * find a lazy `@force-gate` that should gate the fixture build. The stack is
+ * empty again once collection finishes, so it must be read at call time.
+ */
+export function getActiveDescribeGates(): Gate[] {
+  return [...describeGateStack]
+}
+
+/** Whether any of `gates` is a lazy `@force-gate` (resolved from config). */
+export function hasLazyForceGate(gates: Gate[]): boolean {
+  return gates.some((gate) => gate.force && gate.needsResolvedConfig)
+}
+
+/**
+ * The first lazy `@force-gate` in `gates` whose condition is false against the
+ * resolved `config` — i.e. the one that says "don't build this fixture here" —
+ * or `null` if none apply. Used by `nextTestSetup` to skip the build.
+ */
+export function findLazyForceSkip(
+  gates: Gate[],
+  config: ResolvedNextConfig
+): GatePragma | null {
+  for (const gate of gates) {
+    if (
+      gate.force &&
+      gate.needsResolvedConfig &&
+      !evaluate(gate.node, (name) => readCondition(name, config))
+    ) {
+      return gate
+    }
+  }
+  return null
 }
 
 /**
@@ -296,4 +364,4 @@ export function installGate(): void {
 }
 
 /** Test-only: the parse/validate half, without registering anything. */
-export const __testing = { parseGate, findFailingGate, wrapGatedBody }
+export const __testing = { parseGate, decideGates, wrapGatedBody }
