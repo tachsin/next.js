@@ -3620,7 +3620,11 @@ export default async function build(
                 const normalizedRoute = normalizePagePath(route.pathname)
                 const parentPageInfo = pageInfos.get(page) as PageInfo
 
-                const routeResult = exportResult.byPath.get(route.pathname)
+                // Keyed by the path the artifact was written to, which for a
+                // variant combination is prefixed with its hash.
+                const routeResult = exportResult.byPath.get(
+                  getVariantOutputPath(route.pathname, route.variantValues)
+                )
                 const metadata = routeResult?.metadata
 
                 const cacheControl = getCacheControl(route.pathname)
