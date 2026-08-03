@@ -23,7 +23,10 @@ import {
 } from '../lib/experimental/ppr'
 import { InvariantError } from '../../shared/lib/invariant-error'
 import { collectRootParamKeys } from '../../build/segment-config/app/collect-root-param-keys'
-import { buildAppStaticPaths } from '../../build/static-paths/app'
+import {
+  buildAppStaticPaths,
+  collectVariantCombinations,
+} from '../../build/static-paths/app'
 import { buildPagesStaticPaths } from '../../build/static-paths/pages'
 import { createIncrementalCache } from '../../export/helpers/create-incremental-cache'
 import { parseNormalizedAppRoute } from '../../shared/lib/router/routes/app'
@@ -139,6 +142,7 @@ export async function loadStaticPaths({
       dir,
       page: pathname,
       route,
+      variantCombinations: await collectVariantCombinations(segments, pathname),
       cacheComponents: config.cacheComponents,
       segments,
       distDir,
