@@ -393,16 +393,6 @@ export interface DynamicPrerenderManifestRoute
    * are used internally by Next.js to revalidate routes.
    */
   allowHeader: string[]
-
-  /**
-   * The variant combinations this route declared, grouped by which variants
-   * they assign. A request is matched against these to find the combination it
-   * was prerendered against, which decides both which artifact serves it and
-   * which of its variants are baked in rather than dynamic holes.
-   *
-   * Undefined unless the route declared combinations.
-   */
-  variantCombinationGroups?: VariantCombinationGroups
 }
 
 /**
@@ -424,6 +414,19 @@ export type PrerenderManifest = {
   dynamicRoutes: { [route: string]: DynamicPrerenderManifestRoute }
   notFoundRoutes: string[]
   preview: __ApiPreviewProps
+
+  /**
+   * The variant combinations each page declared, grouped by which variants they
+   * assign, keyed by page. A request is matched against these to find the
+   * combination it was prerendered against, which decides both which artifact
+   * serves it and which of its variants are baked in rather than dynamic holes.
+   *
+   * Keyed by page rather than carried on a route entry because every page that
+   * declares combinations needs it, including one whose route has no fallback
+   * shell and therefore no `dynamicRoutes` entry to hang it on. Empty unless
+   * some page declared combinations.
+   */
+  variantCombinationGroups: { [page: string]: VariantCombinationGroups }
 }
 
 function getPprAppPageClassification(
@@ -2201,6 +2204,8 @@ export default async function build(
       const staticPaths = new Map<string, PrerenderedRoute[]>()
       const appNormalizedPaths = new Map<string, string>()
       const fallbackModes = new Map<string, FallbackMode>()
+      // Collected here because page data is gathered before the prerender
+      // manifest exists, and transferred into it once it does.
       const variantCombinationGroupsByPage = new Map<
         string,
         VariantCombinationGroups
@@ -2631,8 +2636,10 @@ export default async function build(
                           }
 
                           if (workerResult.variantCombinationGroups?.length) {
+                            // Keyed by the page as the runtime knows it, which
+                            // is what a request is matched against.
                             variantCombinationGroupsByPage.set(
-                              originalAppPath,
+                              page,
                               workerResult.variantCombinationGroups
                             )
                           }
@@ -3002,6 +3009,9 @@ export default async function build(
         dynamicRoutes: {},
         notFoundRoutes: [],
         preview: previewProps,
+        variantCombinationGroups: Object.fromEntries(
+          variantCombinationGroupsByPage
+        ),
       }
 
       // The variants header is only meaningful to a project that has variants,
@@ -3206,7 +3216,13 @@ export default async function build(
                     _isDynamicError: isDynamicError,
                     _isAppDir: true,
                     _isRoutePPREnabled: isRoutePPREnabled,
-                    _allowEmptyStaticShell: !route.throwOnEmptyStaticShell,
+                    // A prerender that omits variants is expected to come out
+                    // empty when the route reads one above a boundary: there is
+                    // nothing static left once the values are gone. That is a
+                    // description of the route, not a mistake to report.
+                    _allowEmptyStaticShell:
+                      route.omitsVariants === true ||
+                      !route.throwOnEmptyStaticShell,
                     _variantValues: route.variantValues,
                     // A fallback shell can only be upgraded if at least one of
                     // its fallback params is a `generateStaticParams` candidate,
@@ -3277,16 +3293,28 @@ export default async function build(
           if (!exportResult) return
 
           const getFallbackMode = (route: PrerenderedRoute) => {
+            // Keyed by the written path, because a combination's shell was
+            // exported to its own prefixed path and asking about the route would
+            // report on whichever combination happened to be written there.
             const hasEmptyStaticShell = exportResult.byPath.get(
-              route.pathname
+              getVariantOutputPath(route.pathname, route.variantValues)
             )?.hasEmptyStaticShell
 
             // If the route has an empty static shell and is not configured to
             // throw on empty static shell, then we should use the blocking
             // static render mode.
+            //
+            // Never for a prerender that omits variants, though. A blocking
+            // render would resolve the variants it deliberately left out and
+            // bake them into an entry whose key does not mention them, so the
+            // next request carrying different values would be served these. It
+            // stays a prerender, and the resume supplies the values per request
+            // instead, which is also what keeps one entry from becoming one per
+            // value.
             if (
               hasEmptyStaticShell &&
               !route.throwOnEmptyStaticShell &&
+              !route.omitsVariants &&
               route.fallbackMode === FallbackMode.PRERENDER
             ) {
               return FallbackMode.BLOCKING_STATIC_RENDER
@@ -3864,6 +3892,19 @@ export default async function build(
                     ? cacheControl
                     : undefined
 
+                // Each combination has a shell of its own, so it needs an entry
+                // of its own: a single entry per route pattern could only
+                // describe one of them, and whichever was written last would
+                // decide how every other combination is served.
+                //
+                // The field itself stays the route pattern, which is what the
+                // runtime folds the request's combination into. Consumers that
+                // need the artifact rather than the route derive it from the key.
+                const fallbackOutputPath = getVariantOutputPath(
+                  route.pathname,
+                  route.variantValues
+                )
+
                 const fallback: Fallback = fallbackModeToFallbackField(
                   fallbackMode,
                   route.pathname
@@ -3897,7 +3938,7 @@ export default async function build(
                   }
                 }
 
-                prerenderManifest.dynamicRoutes[route.pathname] = {
+                prerenderManifest.dynamicRoutes[fallbackOutputPath] = {
                   experimentalPPR: isRoutePPREnabled,
                   remainingPrerenderableParams:
                     route.remainingPrerenderableParams,
@@ -3908,8 +3949,13 @@ export default async function build(
                     : undefined,
                   ...classification,
                   experimentalBypassFor: bypassFor,
+                  // Built from the prefixed path so that this entry only matches
+                  // requests carrying its own combination. A regex covering the
+                  // bare route would also match a stripped pathname, and route
+                  // matching would then pick a combination's entry for a request
+                  // that resolved to a different one.
                   routeRegex: normalizeRouteRegex(
-                    getNamedRouteRegex(route.pathname, {
+                    getNamedRouteRegex(fallbackOutputPath, {
                       prefixRouteKeys: false,
                     }).re.source
                   ),
@@ -3928,8 +3974,6 @@ export default async function build(
                       ? page
                       : undefined,
                   fallbackRouteParams: route.fallbackRouteParams,
-                  variantCombinationGroups:
-                    variantCombinationGroupsByPage.get(originalAppPath),
                   dataRouteRegex: !dataRoute
                     ? null
                     : normalizeRouteRegex(
@@ -4448,6 +4492,7 @@ export default async function build(
           dynamicRoutes: {},
           preview: previewProps,
           notFoundRoutes: [],
+          variantCombinationGroups: {},
         })
       }
 

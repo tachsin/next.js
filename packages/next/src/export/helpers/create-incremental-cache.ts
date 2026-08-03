@@ -69,6 +69,7 @@ export async function createIncrementalCache({
         previewModeSigningKey: '',
       },
       notFoundRoutes: [],
+      variantCombinationGroups: {},
     }),
     fs: nodeFs,
     serverDistDir: path.join(distDir, 'server'),
