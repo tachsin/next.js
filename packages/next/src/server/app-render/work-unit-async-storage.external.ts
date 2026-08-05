@@ -302,7 +302,11 @@ interface StaticPrerenderStoreCommon {
   readonly fallbackRouteParams: OpaqueFallbackRouteParams | null
 }
 
-export interface PrerenderStorePPR
+/**
+ * The legacy PPR prerender context. This is the only prerender context that
+ * may call `React.unstable_postpone`.
+ */
+export interface PrerenderStoreLegacyPPR
   extends CommonWorkUnitStore,
     RevalidateStore {
   readonly type: 'prerender-ppr'
@@ -330,7 +334,7 @@ export interface PrerenderStoreLegacy
 
 export type PrerenderStore =
   | PrerenderStoreLegacy
-  | PrerenderStorePPR
+  | PrerenderStoreLegacyPPR
   | PrerenderStoreModern
 
 // /** Like `PrerenderStoreModern`, but only including static prerenders (i.e. not runtime prerenders) */

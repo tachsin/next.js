@@ -357,8 +357,8 @@ export type AppSharedContext = {
 }
 
 type AppRenderCapabilities = {
-  /** Whether this render may postpone dynamic subtrees. */
-  canPostpone: boolean
+  /** Whether this render uses legacy PPR and may call React.unstable_postpone. */
+  isLegacyPPR: boolean
   /**
    * Whether the response may contain postponed holes. This is conservatively
    * true for prerenders with PPR enabled, even when the response turns out to
@@ -3204,7 +3204,7 @@ async function renderToHTMLOrFlightImpl(
       renderOpts.cacheComponents
     ),
     {
-      canPostpone: false,
+      isLegacyPPR: false,
       isPossiblyPartialResponse: false,
       supportsPerSegmentPrefetching: renderOpts.cacheComponents,
     }
@@ -3245,9 +3245,7 @@ async function prerenderToHTMLOrFlightImpl(
       renderOpts.cacheComponents
     ),
     {
-      // These are distinct rendering and protocol properties even though they
-      // are both determined by route-level PPR support today.
-      canPostpone: isRoutePPREnabled,
+      isLegacyPPR: isRoutePPREnabled && !renderOpts.cacheComponents,
       isPossiblyPartialResponse: isRoutePPREnabled,
       supportsPerSegmentPrefetching: true,
     }
@@ -8183,7 +8181,7 @@ async function validateInstantConfigInBuildWithSample(
         outerCtx.renderOpts.cacheComponents
       ),
       renderCapabilities: {
-        canPostpone: false,
+        isLegacyPPR: false,
         isPossiblyPartialResponse: false,
         supportsPerSegmentPrefetching:
           outerCtx.renderCapabilities.supportsPerSegmentPrefetching,
