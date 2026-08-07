@@ -3004,7 +3004,14 @@ export default async function build(
         outputPath: string
       ) {
         if (pageType === 'app') {
-          outputPath = path.posix.join('app', outputPath.replace(/%5F/g, '_'))
+          // Several app paths can serve the same route: a page and its parallel
+          // slots (`/foo/page` and `/foo/@slot/page`) both serve `/foo`. They
+          // share a single manifest at the normalized path, so that the data
+          // doesn't get split across variants that each only see part of it.
+          outputPath = path.posix.join(
+            'app',
+            normalizeAppPath(outputPath).replace(/%5F/g, '_')
+          )
         } else {
           outputPath = path.posix.join('pages', normalizePagePath(outputPath))
         }

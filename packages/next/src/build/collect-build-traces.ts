@@ -500,8 +500,19 @@ export async function collectBuildTraces({
               entryName !== 'pages/_app' &&
               entryName !== 'pages/_document'
             ) {
+              // The manifest lives at the normalized route path, which is shared
+              // by all the app paths serving it (a page and its parallel slots).
+              // That isn't always this chunk's own directory, so resolve it
+              // relative to the trace file.
+              const manifestPath = path.join(
+                distDir,
+                'server',
+                isApp ? 'app' : 'pages',
+                route,
+                PRERENDER_MANIFEST
+              )
               curTracedFiles.add(
-                `${path.basename(entryName)}/${PRERENDER_MANIFEST}`
+                path.relative(traceOutputDir, manifestPath).replace(/\\/g, '/')
               )
             }
 
