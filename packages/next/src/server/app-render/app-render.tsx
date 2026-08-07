@@ -842,7 +842,7 @@ async function generateDynamicRSCPayload(
     baseResponse.a = options.shellByteLengthPromise
   }
   if (options?.shellUsedSessionDataPromise !== undefined) {
-    baseResponse.u = options.shellUsedSessionDataPromise
+    baseResponse.w = options.shellUsedSessionDataPromise
   }
 
   if (options?.runtimePrefetchStream !== undefined) {
@@ -10693,6 +10693,7 @@ async function collectSegmentData(
       // measure, but the static-prefetch hint still rides the manifest —
       // collectPrefetchHints then only builds the tree shape carrying it.
       hints = await ComponentMod.collectPrefetchHints(
+        renderOpts.cacheComponents,
         fullPageDataBuffer,
         staleTime,
         clientModules,
