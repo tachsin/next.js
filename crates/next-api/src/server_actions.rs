@@ -139,8 +139,8 @@ async fn collect_actions(
                 };
                 let mut data = data
                     .split("|");
-                let hash = data.next().unwrap();
-                let name = data.next().unwrap();
+                let hash = data.next().context("expected more data")?;
+                let name = data.next().context("expected more data")?;
 
                 Ok((
                     hash.to_string(),
