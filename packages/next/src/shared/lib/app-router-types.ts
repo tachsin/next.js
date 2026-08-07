@@ -484,12 +484,25 @@ export type NavigationFlightResponse = {
    * or a build-id mismatch), but the client honors it.
    */
   n?: string
-  /** supportsPerSegmentPrefetching */
-  S: boolean
-  /** renderedSearch */
-  q: string
-  /** couldBeIntercepted */
-  i: boolean
+  /**
+   * supportsPerSegmentPrefetching — present in live-render responses;
+   * absent in per-segment prefetch responses served from static storage
+   * (where it's implied by the response's existence).
+   */
+  S?: boolean
+  /**
+   * renderedSearch — present in live-render responses; absent in
+   * per-segment prefetch responses, which are search-agnostic (the client
+   * writes them into the cache using the rendered search already recorded
+   * on the route tree entry).
+   */
+  q?: string
+  /**
+   * couldBeIntercepted — present in live-render responses; absent in
+   * per-segment prefetch responses (the client reads the Vary header
+   * instead).
+   */
+  i?: boolean
   /** staleTime - Only present in dynamic runtime prefetch responses. */
   s?: AsyncIterable<number>
   /** staticStageByteLength - Resolves when the static stage ends. */

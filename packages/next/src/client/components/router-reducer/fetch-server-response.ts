@@ -297,9 +297,13 @@ export async function fetchServerResponse(
       // prefetch responses don't embed the value in the body; they rely on the
       // header alone. So we need to investigate why the header is sometimes
       // wrong for interception routes.
-      renderedSearch: flightResponse.q as NormalizedSearch,
+      // `q` and `S` are always present in live-render responses, which are
+      // the only kind this flow receives (per-segment prefetch responses,
+      // which omit them, are decoded by the segment cache instead). The
+      // fallbacks are for the type system.
+      renderedSearch: (flightResponse.q ?? '') as NormalizedSearch,
       couldBeIntercepted: interception,
-      supportsPerSegmentPrefetching: flightResponse.S,
+      supportsPerSegmentPrefetching: flightResponse.S ?? false,
       postponed,
       // The dynamicStaleTime is only present in the response body when
       // a page exports unstable_dynamicStaleTime and this is a dynamic render.

@@ -10763,10 +10763,10 @@ async function collectSegmentData(
     renderOpts.isFallbackUpgradeable === true
 
   // Pass the resolved hints so collectSegmentData can union them into
-  // the TreePrefetch. During the initial build the FlightRouterState in
+  // the /_tree response. During the initial build the transport tree in
   // the buffer doesn't have inlining hints yet (they were just computed
   // above), so we need to merge them in here. At runtime/ISR the hints
-  // are already embedded in the FlightRouterState, so this is null.
+  // are already embedded in the buffer's tree, so this is null.
   metadata.segmentData = await ComponentMod.collectSegmentData(
     renderOpts.cacheComponents,
     fullPageDataBuffer,
