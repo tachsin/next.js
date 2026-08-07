@@ -250,7 +250,7 @@ export class NextDeployInstance extends NextInstance {
     super.setup(parentSpan)
     await super.createTestDir({ parentSpan, skipInstall: true })
 
-    await this.writeMirrorNpmrcIfNecessary()
+    await this.writeMirrorVercelJsonIfNecessary()
 
     const existingDeployUrl = process.env.NEXT_TEST_DEPLOY_URL?.trim()
     const customDeployScriptPath =
@@ -508,35 +508,46 @@ export class NextDeployInstance extends NextInstance {
   // When preview builds are private, the deploy build installs Next.js
   // artifacts from an auth-protected route and needs credentials. The build
   // authenticates with the Vercel OIDC token that Vercel automatically
-  // provides to builds (vercel-packages accepts it for allowlisted teams), so
-  // we write an `.npmrc` referencing it. Referencing the environment variable
-  // instead of inlining a token keeps credentials out of the uploaded
-  // deployment source. Only written for private preview builds since public
-  // ones need no credentials and pnpm fails when an `.npmrc` references an
-  // unset environment variable.
-  private async writeMirrorNpmrcIfNecessary(): Promise<void> {
+  // provides to builds (vercel-packages accepts it for allowlisted teams).
+  // pnpm no longer expands environment variables in repository .npmrc files
+  // (GHSA-3qhv-2rgh-x77r), so the install command writes the shell-expanded
+  // token to the user-level pnpm config instead and no credential is inlined
+  // into the uploaded deployment source. Only configured for private preview
+  // builds since public ones need no credentials.
+  private async writeMirrorVercelJsonIfNecessary(): Promise<void> {
     const baseUrlRaw = process.env.NEXT_TEST_PREVIEW_BUILDS_BASE_URL
-    const access = process.env.NEXT_TEST_PREVIEW_BUILDS_ACCESS
+    const access = process.env.PREVIEW_BUILDS_ACCESS
 
     if (!baseUrlRaw || access !== 'private') {
-      require('console').log(
-        `Skipping .npmrc write for preview-builds mirror: missing base URL or preview builds are public`
-      )
       return
     }
 
     const baseUrl = new URL(baseUrlRaw)
-    // Derive the npmrc auth key from the mirror base URL: strip the scheme and
-    // ensure a trailing slash so it matches requests to that registry path.
+    // Derive the pnpm config key from the mirror base URL: strip the scheme
+    // and ensure a trailing slash so it matches requests to that registry path.
     const registryKey = `//${baseUrl.host}${baseUrl.pathname.replace(/\/?$/, '/')}`
 
+    const vercelJsonPath = path.join(this.testDir, 'vercel.json')
+    let vercelJson: Record<string, unknown> = {}
+    try {
+      vercelJson = JSON.parse(await fs.readFile(vercelJsonPath, 'utf8'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
+    }
+
+    const configureAuth = `pnpm config set --location=user '${registryKey}:_authToken' "$VERCEL_OIDC_TOKEN"`
+    const existingInstallCommand = vercelJson.installCommand
+    vercelJson.installCommand =
+      typeof existingInstallCommand === 'string'
+        ? `${configureAuth} && ${existingInstallCommand}`
+        : `${configureAuth} && pnpm install`
+
     require('console').log(
-      `Writing .npmrc for preview-builds mirror: ${registryKey}`
+      `Writing vercel.json for preview-builds mirror: ${registryKey}`
     )
-    await fs.writeFile(
-      path.join(this.testDir, '.npmrc'),
-      `${registryKey}:_authToken=\${VERCEL_OIDC_TOKEN}\n`
-    )
+    await fs.writeFile(vercelJsonPath, JSON.stringify(vercelJson, null, 2))
   }
 
   private async configureProxyAddress(): Promise<void> {

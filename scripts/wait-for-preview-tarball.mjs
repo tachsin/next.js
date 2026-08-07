@@ -49,7 +49,7 @@ async function mintGitHubActionsOidcToken(audience) {
  * @returns {Promise<string | null>}
  */
 export async function getPreviewBuildsReadToken() {
-  if (process.env.NEXT_TEST_PREVIEW_BUILDS_ACCESS !== 'private') {
+  if (process.env.PREVIEW_BUILDS_ACCESS !== 'private') {
     return null
   }
   const token = await mintGitHubActionsOidcToken(
@@ -57,7 +57,7 @@ export async function getPreviewBuildsReadToken() {
   )
   if (token === null) {
     throw new Error(
-      'Preview builds are private (NEXT_TEST_PREVIEW_BUILDS_ACCESS=private) ' +
+      'Preview builds are private (PREVIEW_BUILDS_ACCESS=private) ' +
         'but no GitHub Actions OIDC token can be minted. ' +
         'Grant the job the `id-token: write` permission.'
     )
