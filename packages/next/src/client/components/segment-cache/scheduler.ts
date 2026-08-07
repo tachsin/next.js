@@ -18,7 +18,7 @@ import {
   type FulfilledRouteCacheEntry,
   type RouteCacheEntry,
   type RouteTree,
-  fetchSegmentPrefetchesUsingDynamicRequest,
+  fetchSegmentPrefetchesUsingRuntimeRequest,
   type PendingSegmentCacheEntry,
   type SegmentCacheEntry,
   type SegmentBundle,
@@ -954,7 +954,7 @@ function pingRootRouteTree(
               )
               if (spawnedEntries.size > 0) {
                 spawnPrefetchSubtask(
-                  fetchSegmentPrefetchesUsingDynamicRequest(
+                  fetchSegmentPrefetchesUsingRuntimeRequest(
                     task,
                     route,
                     runtimeStrategy,
@@ -1001,7 +1001,7 @@ function pingRootRouteTree(
           let needsDynamicRequest = spawnedEntries.size > 0
           if (needsDynamicRequest) {
             spawnPrefetchSubtask(
-              fetchSegmentPrefetchesUsingDynamicRequest(
+              fetchSegmentPrefetchesUsingRuntimeRequest(
                 task,
                 route,
                 fetchStrategy,

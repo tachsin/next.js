@@ -34,15 +34,11 @@ import {
   waitForSegmentCacheEntry,
   markRouteEntryAsDynamicRewrite,
   invalidateRouteCacheEntries,
-  resolveStaleAt,
-  writePrerenderResponseIntoCache,
-  processRuntimePrefetchStream,
-  writeDynamicRenderResponseIntoCache,
+  spawnStaticStageCacheWrite,
+  writeRuntimePrefetchStreamIntoCache,
   EntryStatus,
 } from '../segment-cache/cache'
-import { FetchStrategy } from '../segment-cache/types'
 import { discoverKnownRoute } from '../segment-cache/optimistic-routes'
-import { NEXT_NAV_DEPLOYMENT_ID_HEADER } from '../../../lib/constants'
 import { urlSearchParamsToParsedUrlQuery } from '../../route-params'
 import type { NormalizedSearch } from '../segment-cache/cache-key'
 import {
@@ -1815,63 +1811,27 @@ async function fetchMissingDynamicData(
       await navigationLock
     }
 
-    // TODO: Implement Shell extraction as part of Cached Navigations.
-    // Intentionally holding off on doing this until we decide how the Cached
-    // Navigations behavior should work in combination with App Shells.
-    if (routeCacheEntry !== null && result.staticStageData !== null) {
-      const { response: staticStageResponse, isResponsePartial } =
-        result.staticStageData
-
-      resolveStaleAt(now, staticStageResponse.s)
-        .then((staleAt) => {
-          const buildId =
-            result.responseHeaders.get(NEXT_NAV_DEPLOYMENT_ID_HEADER) ??
-            staticStageResponse.b
-
-          writePrerenderResponseIntoCache(
-            now,
-            FetchStrategy.PPR,
-            staticStageResponse.t ?? null,
-            buildId,
-            staticStageResponse.r ?? null,
-            staleAt,
-            dynamicRequestTree,
-            result.renderedSearch,
-            isResponsePartial
-          )
-        })
-        .catch(() => {
-          // The static stage processing failed. Not fatal — the navigation
-          // completed normally, we just won't write into the cache.
-        })
+    if (routeCacheEntry !== null && result.staticStageResponse !== null) {
+      spawnStaticStageCacheWrite(
+        now,
+        result.staticStageResponse,
+        result.isResponsePartial,
+        result.responseHeaders,
+        dynamicRequestTree,
+        result.renderedSearch
+      )
     }
 
     if (routeCacheEntry !== null && result.runtimePrefetchStream !== null) {
-      processRuntimePrefetchStream(
+      writeRuntimePrefetchStreamIntoCache(
         now,
         result.runtimePrefetchStream,
         dynamicRequestTree,
         result.renderedSearch
-      )
-        .then((processed) => {
-          if (processed !== null) {
-            writeDynamicRenderResponseIntoCache(
-              now,
-              FetchStrategy.PPRRuntime,
-              processed.buildId,
-              processed.isResponsePartial,
-              processed.headVaryParams,
-              processed.rootVaryParamsIterable,
-              processed.staleAt,
-              processed.navigationSeed,
-              null
-            )
-          }
-        })
-        .catch(() => {
-          // The runtime prefetch cache write failed. Not fatal — the
-          // navigation completed normally, we just won't cache runtime data.
-        })
+      ).catch(() => {
+        // The runtime prefetch cache write failed. Not fatal — the
+        // navigation completed normally, we just won't cache runtime data.
+      })
     }
 
     // result.dynamicStaleTime is in seconds (from the server's `d` field).

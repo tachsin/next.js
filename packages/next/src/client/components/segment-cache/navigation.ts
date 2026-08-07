@@ -14,15 +14,12 @@ import {
   type NavigationRequestAccumulation,
 } from '../router-reducer/ppr-navigations'
 import { createHrefFromUrl } from '../router-reducer/create-href-from-url'
-import { NEXT_NAV_DEPLOYMENT_ID_HEADER } from '../../../lib/constants'
 import {
   EntryStatus,
   readRouteCacheEntry,
   deprecated_requestOptimisticRouteCacheEntry,
-  resolveStaleAt,
-  writePrerenderResponseIntoCache,
-  processRuntimePrefetchStream,
-  writeDynamicRenderResponseIntoCache,
+  spawnStaticStageCacheWrite,
+  writeRuntimePrefetchStreamIntoCache,
   type FulfilledRouteCacheEntry,
 } from './cache'
 import { discoverKnownRoute } from './optimistic-routes'
@@ -494,7 +491,8 @@ async function navigateToUnknownRoute(
     couldBeIntercepted,
     supportsPerSegmentPrefetching,
     dynamicStaleTime,
-    staticStageData,
+    isResponsePartial,
+    staticStageResponse,
     runtimePrefetchStream,
     responseHeaders,
     debugInfo,
@@ -537,66 +535,27 @@ async function navigateToUnknownRoute(
       false // hasDynamicRewrite - not a retry, rewrite detection happens during traversal
     )
 
-    if (staticStageData !== null) {
-      const { response: staticStageResponse, isResponsePartial } =
-        staticStageData
-
-      // Write the static stage of the response into the segment cache so that
-      // subsequent navigations can serve cached static segments instantly.
-      resolveStaleAt(now, staticStageResponse.s)
-        .then((staleAt) => {
-          const buildId =
-            responseHeaders.get(NEXT_NAV_DEPLOYMENT_ID_HEADER) ??
-            staticStageResponse.b
-
-          // TODO: Implement Shell extraction as part of Cached Navigations.
-          // Intentionally holding off on doing this until we decide how the
-          // Cached Navigations behavior should work in combination with App
-          // Shells.
-          writePrerenderResponseIntoCache(
-            now,
-            FetchStrategy.PPR,
-            staticStageResponse.t ?? null,
-            buildId,
-            staticStageResponse.r ?? null,
-            staleAt,
-            currentFlightRouterState,
-            renderedSearch,
-            isResponsePartial
-          )
-        })
-        .catch(() => {
-          // The static stage processing failed. Not fatal — the navigation
-          // completed normally, we just won't write into the cache.
-        })
+    if (staticStageResponse !== null) {
+      spawnStaticStageCacheWrite(
+        now,
+        staticStageResponse,
+        isResponsePartial,
+        responseHeaders,
+        currentFlightRouterState,
+        renderedSearch
+      )
     }
 
     if (runtimePrefetchStream !== null) {
-      processRuntimePrefetchStream(
+      writeRuntimePrefetchStreamIntoCache(
         now,
         runtimePrefetchStream,
         currentFlightRouterState,
         renderedSearch
-      )
-        .then((processed) => {
-          if (processed !== null) {
-            writeDynamicRenderResponseIntoCache(
-              now,
-              FetchStrategy.PPRRuntime,
-              processed.buildId,
-              processed.isResponsePartial,
-              processed.headVaryParams,
-              processed.rootVaryParamsIterable,
-              processed.staleAt,
-              processed.navigationSeed,
-              null
-            )
-          }
-        })
-        .catch(() => {
-          // The runtime prefetch cache write failed. Not fatal — the
-          // navigation completed normally, we just won't cache runtime data.
-        })
+      ).catch(() => {
+        // The runtime prefetch cache write failed. Not fatal — the
+        // navigation completed normally, we just won't cache runtime data.
+      })
     }
   }
 
