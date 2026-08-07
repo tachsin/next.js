@@ -735,7 +735,12 @@ jobs:
     # Outer bound only. The script gives up first, so a tarball that never
     # arrives is reported by it rather than by the runner killing the job.
     timeout-minutes: 35
-    permissions: {}
+    permissions:
+      # contents: read is needed to check out in private repos (the mirror).
+      contents: read
+      # Minting GitHub OIDC tokens to read private preview builds. Dormant in
+      # this repo since builds here are public.
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
