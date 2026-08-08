@@ -1215,7 +1215,7 @@ export default async function build(
           })
 
         Log.info('Complete')
-        await flushAllTraces()
+        flushAllTraces()
         teardownTraceSubscriber()
         process.exit(0)
       }
@@ -4585,8 +4585,8 @@ export default async function build(
       await telemetry.flush()
     }
 
-    // Ensure all traces are flushed before finishing the command
-    await flushAllTraces()
+    // Ensure all buffered spans are on disk before `uploadTrace` reads the file.
+    flushAllTraces()
     teardownTraceSubscriber()
 
     if (traceUploadUrl && loadedConfig) {
