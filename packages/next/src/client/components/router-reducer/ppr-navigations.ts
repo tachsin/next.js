@@ -1855,7 +1855,12 @@ async function fetchMissingDynamicData(
         now,
         result.runtimePrefetchStream,
         dynamicRequestTree,
-        result.renderedSearch
+        result.renderedSearch,
+        {
+          url: result.canonicalUrl,
+          nextUrl,
+          actionRoutingKeys: result.actionRoutingKeys,
+        }
       )
         .then((processed) => {
           if (processed !== null) {

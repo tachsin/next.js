@@ -147,7 +147,12 @@ export function createInitialRouterState({
               await decodeStageUntilBoundary<InitialRSCPayload>(
                 initialFlightStreamForCache,
                 byteLength,
-                undefined
+                undefined,
+                {
+                  url: canonicalUrl,
+                  nextUrl: null,
+                  actionRoutingKeys: initialRSCPayload.A,
+                }
               )
             const now = Date.now()
             const staleAt = await resolveStaleAt(now, staticStageResponse.s)
@@ -212,7 +217,12 @@ export function createInitialRouterState({
         Date.now(),
         initialRuntimePrefetchStream,
         initialTree,
-        initialRenderedSearch
+        initialRenderedSearch,
+        {
+          url: canonicalUrl,
+          nextUrl: null,
+          actionRoutingKeys: initialRSCPayload.A,
+        }
       )
         .then((processed) => {
           if (processed !== null) {

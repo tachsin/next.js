@@ -27,6 +27,7 @@ import {
   createFromNextReadableStream,
   decodeBufferedStage,
   resolveShellStageData,
+  type FlightDecoderActionDispatchContext,
   type RSCResponse,
   type RequestHeaders,
 } from '../router-reducer/fetch-server-response'
@@ -2181,7 +2182,10 @@ export async function fetchRouteOnCacheMiss(
       const serverData = await createFromNextReadableStream<RootTreePrefetch>(
         prefetchStream,
         headers,
-        { allowPartialStream: true }
+        {
+          allowPartialStream: true,
+          actionDispatchContext: { url: canonicalUrl, nextUrl },
+        }
       )
 
       if (
@@ -2247,7 +2251,10 @@ export async function fetchRouteOnCacheMiss(
         await createFromNextReadableStream<NavigationFlightResponse>(
           prefetchStream,
           headers,
-          { allowPartialStream: true }
+          {
+            allowPartialStream: true,
+            actionDispatchContext: { url: canonicalUrl, nextUrl },
+          }
         )
 
       if (
@@ -2546,7 +2553,14 @@ async function fetchSegmentsOnCacheMissImpl(
     await createFromNextReadableStream<SegmentPrefetchResponse>(
       prefetchStream,
       headers,
-      { allowPartialStream: true }
+      {
+        allowPartialStream: true,
+        actionDispatchContext: {
+          url: route.canonicalUrl,
+          nextUrl,
+          actionRoutingKeys: route.actionRoutingKeys,
+        },
+      }
     )
 
   if (serverResponse.data.length === 0) {
@@ -2589,7 +2603,12 @@ async function fetchSegmentsOnCacheMissImpl(
     try {
       shellResponse = await decodeBufferedStage<SegmentPrefetchResponse>(
         buffer.subarray(0, shellOffset),
-        headers
+        headers,
+        {
+          url: route.canonicalUrl,
+          nextUrl,
+          actionRoutingKeys: route.actionRoutingKeys,
+        }
       )
     } catch {
       // The truncated prefix couldn't be decoded. Treat it as if no shell
@@ -3243,7 +3262,10 @@ export async function fetchSegmentPrefetchesUsingDynamicRequest(
       createFromNextReadableStream<NavigationFlightResponse>(
         prefetchStream,
         headers,
-        { allowPartialStream: true }
+        {
+          allowPartialStream: true,
+          actionDispatchContext: { url: route.canonicalUrl, nextUrl },
+        }
       ),
       response.cacheData,
     ])
@@ -3269,7 +3291,12 @@ export async function fetchSegmentPrefetchesUsingDynamicRequest(
       const shellStageData = await resolveShellStageData(
         cacheData,
         serverData,
-        headers
+        headers,
+        {
+          url: route.canonicalUrl,
+          nextUrl,
+          actionRoutingKeys: serverData.A,
+        }
       )
       if (shellStageData === null) {
         // No App Shell can be extracted. This usually means the entire response
@@ -4201,7 +4228,8 @@ export async function processRuntimePrefetchStream(
   now: number,
   runtimePrefetchStream: ReadableStream<Uint8Array>,
   baseTree: FlightRouterState,
-  renderedSearch: string
+  renderedSearch: string,
+  actionDispatchContext: FlightDecoderActionDispatchContext
 ): Promise<{
   navigationSeed: NavigationSeed
   buildId: string | undefined
@@ -4216,7 +4244,7 @@ export async function processRuntimePrefetchStream(
     await createFromNextReadableStream<NavigationFlightResponse>(
       stream,
       undefined,
-      { allowPartialStream: true }
+      { allowPartialStream: true, actionDispatchContext }
     )
 
   const rootVaryParamsIterable = serverData.r ?? null
