@@ -74,6 +74,8 @@ import {
   getRenderedSearch,
   parseDynamicParamFromURLPart,
 } from '../../route-params'
+import { hasBasePath } from '../../has-base-path'
+import { removeBasePath } from '../../remove-base-path'
 import {
   createCacheMap,
   getFromCacheMap,
@@ -229,6 +231,18 @@ type RouteCacheEntryShared = {
   // pre-initialized to `false` when the entry is created and only meaningful
   // once the entry is fulfilled.
   hasDynamicRewrite: boolean
+
+  // When true, this entry was not received from the server; it was
+  // constructed by matching the URL against a previously learned route
+  // pattern (see matchKnownRoute). A predicted entry assumes the requested
+  // URL maps 1:1 onto the pattern — i.e. that the server renders the same
+  // pathname that was requested. Response paths use this to verify the
+  // prediction against the rendered pathname and mark the pattern with
+  // hasDynamicRewrite when it was wrong.
+  //
+  // Declared on every entry variant for the same hidden class reason
+  // as hasDynamicRewrite.
+  isPredicted: boolean
 
   // Map-related fields.
   ref: UnknownMapEntry | null
@@ -700,6 +714,7 @@ function createDetachedRouteCacheEntry(): PendingRouteCacheEntry {
     // Similarly, we don't yet know if the route supports PPR.
     supportsPerSegmentPrefetching: false,
     hasDynamicRewrite: false,
+    isPredicted: false,
     renderedSearch: null,
 
     // Map-related fields
@@ -852,6 +867,11 @@ export function deprecated_requestOptimisticRouteCacheEntry(
     supportsPerSegmentPrefetching:
       routeWithNoSearchParams.supportsPerSegmentPrefetching,
     hasDynamicRewrite: routeWithNoSearchParams.hasDynamicRewrite,
+    // Although this entry is speculative, it's not a product of pattern
+    // matching (its pathname comes from a real cache entry), and it's only
+    // used to perform a navigation, where mismatches are detected by the
+    // navigation retry path rather than the isPredicted check.
+    isPredicted: false,
 
     // Override the rendered search with the optimistic value.
     renderedSearch: optimisticRenderedSearch,
@@ -1577,6 +1597,7 @@ export function fulfillRouteCacheEntry(
   fulfilledEntry.renderedSearch = renderedSearch
   fulfilledEntry.supportsPerSegmentPrefetching = supportsPerSegmentPrefetching
   fulfilledEntry.hasDynamicRewrite = false
+  fulfilledEntry.isPredicted = false
   pingBlockedTasks(entry)
   return fulfilledEntry
 }
@@ -3178,6 +3199,47 @@ export async function fetchSegmentPrefetchesUsingDynamicRequest(
       // the response, but we can try again after 10 seconds.
       rejectSegmentEntriesIfStillPending(spawnedEntries, Date.now() + 10 * 1000)
       return null
+    }
+
+    if (route.isPredicted) {
+      // This route entry was constructed by matching the URL against a
+      // previously learned route pattern (see matchKnownRoute), under the
+      // assumption that the server renders the same pathname that was
+      // requested. Verify that now. If the server rendered a different
+      // pathname, the request was affected by a dynamic rewrite, and the
+      // predicted route tree — including the param values baked into the
+      // request tree we just sent — is wrong. The server can never return
+      // the segments such a request asks for, so without this check the
+      // task would keep re-deriving the same prediction and spin.
+      const renderedPathname = getRenderedPathname(response)
+      // Rendered pathnames never include the basePath; strip it from the
+      // predicted pathname the same way getRenderedPathname does.
+      const predictedPathname = hasBasePath(url.pathname)
+        ? removeBasePath(url.pathname)
+        : url.pathname
+      if (renderedPathname !== predictedPathname) {
+        // The synthetic entry doubles as the stored pattern, so marking it
+        // disables the pattern that produced the misprediction; future
+        // matches bail out to server resolution. This mirrors what
+        // dispatchRetryDueToTreeMismatch does when a navigation (rather than
+        // a prefetch) discovers the same mismatch.
+        markRouteEntryAsDynamicRewrite(route)
+        // Other entries may have been derived from the pattern before we knew
+        // it had a dynamic rewrite. Invalidate them and re-ping visible links
+        // so they re-prefetch using server resolution. This can't loop: the
+        // marked pattern no longer matches, so the re-issued prefetches skip
+        // prediction entirely.
+        invalidateRouteCacheEntries(key.nextUrl, task.treeAtTimeOfPrefetch)
+        // TODO: Consider also bounding retries with a counter on the task
+        // object, so that a prefetch that repeatedly fails to settle backs
+        // off regardless of the reason, the way navigations fall back to an
+        // MPA navigation after successive mismatches.
+        rejectSegmentEntriesIfStillPending(
+          spawnedEntries,
+          Date.now() + 10 * 1000
+        )
+        return null
+      }
     }
 
     const renderedSearch = getRenderedSearch(response)

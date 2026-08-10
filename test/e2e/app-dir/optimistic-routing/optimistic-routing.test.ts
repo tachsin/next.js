@@ -392,6 +392,68 @@ describe('optimistic-routing', () => {
     ])
   })
 
+  it('rewrite detection (prefetch): detects mispredicted prefetch when a shape-preserving rewrite changes the params', async () => {
+    let act: ReturnType<typeof createRouterAct>
+    const browser = await next.browser('/', {
+      beforePageLoad(page) {
+        act = createRouterAct(page)
+      },
+    })
+
+    // Step 1: Prefetch /products/electronics/phone-1 to learn the
+    // /products/[category]/[id] pattern. This URL is not rewritten, so the
+    // pattern is learned cleanly and can be used for prediction.
+    const revealProduct1 = await browser.elementByCss(
+      'input[data-link-accordion="/products/electronics/phone-1"]'
+    )
+    await act(
+      async () => {
+        await revealProduct1.click()
+      },
+      {
+        includes: 'Loading',
+      }
+    )
+
+    // Step 2: Reveal /products/promo/gadget (prefetch={true}). The URL
+    // matches the learned pattern, so the client predicts the route with
+    // category="promo" and issues the prefetch based on that prediction. But
+    // the proxy rewrites this URL to /products/sale/gadget — a rewrite that
+    // preserves the route's shape, so it was undetectable at learn time. The
+    // prefetch response reveals the rewritten pathname; the client must mark
+    // the pattern as having a dynamic rewrite and re-prefetch using server
+    // resolution.
+    await act(async () => {
+      const revealPromo = await browser.elementByCss(
+        'input[data-link-accordion="/products/promo/gadget"]'
+      )
+      await revealPromo.click()
+    })
+
+    // Step 3: Navigate. The page must render the params the server actually
+    // rendered (category="sale"), with no intermediate render of the
+    // mispredicted params (category="promo").
+    const linkPromo = await browser.elementByCss(
+      'a[href="/products/promo/gadget"]'
+    )
+    await act(async () => {
+      await linkPromo.click()
+    })
+
+    const productTitle = await browser.elementById('product-title')
+    expect(await productTitle.text()).toBe('Product: sale/gadget')
+
+    // If the router had rendered the mispredicted route tree, we'd see an
+    // entry with category "promo" before the corrected one.
+    expect(await getRenderedRouteHistory(browser)).toEqual([
+      { url: '/', params: {} },
+      {
+        url: '/products/promo/gadget',
+        params: { category: 'sale', id: 'gadget' },
+      },
+    ])
+  })
+
   it('rewrite detection (search params): does not use cached pattern when search params cause different rewrite', async () => {
     let act: ReturnType<typeof createRouterAct>
     const browser = await next.browser('/', {

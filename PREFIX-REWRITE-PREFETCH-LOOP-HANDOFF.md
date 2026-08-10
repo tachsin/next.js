@@ -1,7 +1,20 @@
 # Handoff: infinite prefetch loop when a proxy injects a leading path segment
 
-Status: **reproduced, root-caused, not fixed.** There is a failing e2e test on this
-branch that pins the bug. Nothing in `packages/` has been touched.
+Status: **fixed on this branch.** Fix directions (1) and (2) below are implemented;
+(3) is left as a TODO (see the comment in `fetchSegmentPrefetchesUsingDynamicRequest`).
+The e2e repro passes in start mode, and there is a new value-dependent-rewrite case
+in `test/e2e/app-dir/optimistic-routing` covering the prefetch-side detection.
+
+- (1) is implemented as a per-segment comparison in `discoverKnownRoutePart`: a
+  dynamic segment's param cache key holds the value parsed from the _rendered_
+  pathname, so comparing it against the URL part(s) the segment would consume
+  detects any shape-shifting rewrite at learn time, at every learn site, and the
+  pattern is not stored (`handleMismatchDueToRewrite`).
+- (2) is implemented with a new `isPredicted` flag on route cache entries, set
+  only by `matchKnownRoute`. `fetchSegmentPrefetchesUsingDynamicRequest` compares
+  the response's rendered pathname against the predicted pathname and, on
+  mismatch, calls `markRouteEntryAsDynamicRewrite` + `invalidateRouteCacheEntries`
+  (the synthetic entry doubles as the stored pattern, so this disables it).
 
 Reported as "next-intl causes a request waterfall":
 <https://github.com/MarkBekooy/prefetching-request-waterfall-bug/pull/1>.
