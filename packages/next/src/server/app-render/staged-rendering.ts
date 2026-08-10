@@ -5,7 +5,8 @@ export enum RenderStage {
   Before = 1,
   //
   ShellStatic = 10,
-  Static = 11,
+  PrefetchStatic = 11,
+  Static = 12,
   //
   ShellRuntime = 20,
   PrefetchRuntime = 21,
@@ -22,6 +23,7 @@ export type AdvanceableRenderStage = Exclude<
 
 export const RENDER_STAGE_ADVANCE_ORDER: AdvanceableRenderStage[] = [
   RenderStage.ShellStatic,
+  RenderStage.PrefetchStatic,
   RenderStage.Static,
   //
   RenderStage.ShellRuntime,

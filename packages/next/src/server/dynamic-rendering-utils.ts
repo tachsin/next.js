@@ -7,6 +7,7 @@ import type {
   WorkUnitStore,
 } from './app-render/work-unit-async-storage.external'
 import { workUnitAsyncStorage } from './app-render/work-unit-async-storage.external'
+import { STATIC_PRERENDER_NAVIGATION_STAGE } from './request/cache-stages'
 import { getServerReact, getClientReact } from './runtime-reacts.external'
 import { ReflectAdapter } from './web/spec-extension/adapters/reflect'
 
@@ -248,6 +249,19 @@ function trackRuntimeDataAccessedImpl(
 ): void {
   switch (workUnitStore.type) {
     case 'prerender': {
+      const { stagedRendering } = workUnitStore
+      if (
+        stagedRendering &&
+        stagedRendering.currentStage >= STATIC_PRERENDER_NAVIGATION_STAGE
+      ) {
+        // Ignore any accesses that happen after `navigation()` resolves.
+        // The purpose of this tracking is to judge whether a runtime prefetch
+        // would give us a more complete result than a static one.
+        // But `navigation()` wouldn't have resolved in a runtime prefetch,
+        // so e.g. `await navigation(); await cookies()` wouldn't have more content
+        // in those, and we shouldn't count it.
+        return
+      }
       // Response-level flag (the payload's `u`, forwarded to segment
       // responses as `needsRuntimeRequest`): resolved for every kind of
       // access — a pre-upgrade fallback response must keep reporting that
@@ -413,7 +427,7 @@ export function trackPromiseUsed<T>(promise: Promise<T>, onUse: () => void) {
 
 export const RENDER_STAGES_BY_DATA_KIND = {
   sessionData: RenderStage.ShellRuntime as const,
-  staticLinkData: RenderStage.Static as const,
+  staticLinkData: RenderStage.PrefetchStatic as const,
   runtimeLinkData: RenderStage.PrefetchRuntime as const,
 }
 
