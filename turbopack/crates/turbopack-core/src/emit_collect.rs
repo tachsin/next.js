@@ -3,6 +3,7 @@ use turbo_tasks::Vc;
 
 use crate::{
     chunk::{ChunkItem, ChunkingContext},
+    compile_time_info::CompileTimeDefineValue,
     module::{Module, Modules},
     module_graph::ModuleGraph,
 };
@@ -49,7 +50,6 @@ pub trait CollectingModule: Module {
 // name to the console#[turbo_tasks::value_trait]
 #[turbo_tasks::value_trait]
 pub trait EmittedModuleReference {
-    // TODO Vc<JsValue>
     #[turbo_tasks::function]
-    fn data(self: Vc<Self>) -> Vc<Option<RcStr>>;
+    fn data(self: Vc<Self>) -> Vc<CompileTimeDefineValue>;
 }

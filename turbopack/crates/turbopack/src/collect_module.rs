@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{borrow::Cow, io::Write};
 
 use anyhow::{Result, bail};
 use rustc_hash::FxHashSet;
@@ -283,11 +283,15 @@ impl EcmascriptChunkPlaceable for CollectModuleWithChunkGroup {
 
         code += "const data = ([\n";
         for (id, data) in items {
+            let data_code = match data {
+                Some(data) => Cow::Owned(data.as_ecmascript()),
+                None => Cow::Borrowed("undefined"),
+            };
             writeln!(
                 code,
                 "{{id: {}, data: {}, import: () => {TURBOPACK_IMPORT}({})}},",
                 StringifyJs(&id),
-                StringifyJs(&data),
+                data_code,
                 StringifyJs(&id),
             )?;
         }

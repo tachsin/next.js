@@ -105,7 +105,8 @@ macro_rules! free_var_references {
 
 // TODO: replace with just a `serde_json::Value`
 // https://linear.app/vercel/issue/WEB-1641/compiletimedefinevalue-should-just-use-serde-jsonvalue
-#[derive(Debug, Clone, TraceRawVcs, NonLocalValue, Encode, Decode, PartialEq, Eq, Hash)]
+#[turbo_tasks::value(shared)]
+#[derive(Debug, Clone, Hash)]
 pub enum CompileTimeDefineValue {
     Null,
     Bool(bool),
@@ -125,6 +126,32 @@ pub enum CompileTimeDefineValue {
     Undefined,
     Evaluate(RcStr),
     Regex(RcStr, RcStr),
+}
+
+impl CompileTimeDefineValue {
+    pub fn as_ecmascript(&self) -> String {
+        match self {
+            CompileTimeDefineValue::Null => "null".to_string(),
+            CompileTimeDefineValue::Bool(v) => serde_json::to_string(v).unwrap(),
+            CompileTimeDefineValue::Number(v) => serde_json::to_string(v).unwrap(),
+            CompileTimeDefineValue::String(v) => serde_json::to_string(v).unwrap(),
+            CompileTimeDefineValue::BigInt(b) => format!("{}n", b),
+            CompileTimeDefineValue::Array(a) => {
+                let elements: Vec<String> = a.iter().map(|v| v.as_ecmascript()).collect();
+                format!("[{}]", elements.join(", "))
+            }
+            CompileTimeDefineValue::Object(o) => {
+                let properties: Vec<String> = o
+                    .iter()
+                    .map(|(k, v)| format!("{:?}: {}", k, v.as_ecmascript()))
+                    .collect();
+                format!("{{{}}}", properties.join(", "))
+            }
+            CompileTimeDefineValue::Undefined => "undefined".to_string(),
+            CompileTimeDefineValue::Evaluate(e) => e.to_string(),
+            CompileTimeDefineValue::Regex(r, f) => format!("/{}/{}", r, f),
+        }
+    }
 }
 
 impl From<bool> for CompileTimeDefineValue {
