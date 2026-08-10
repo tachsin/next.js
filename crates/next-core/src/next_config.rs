@@ -1431,6 +1431,8 @@ pub struct ExperimentalConfig {
     turbopack_infer_module_side_effects: Option<bool>,
     /// Enable tree shaking of unused exports from static CommonJS modules. Defaults to false.
     turbopack_cjs_tree_shaking: Option<bool>,
+    /// Enable cross-module constant inlining. Defaults to false.
+    turbopack_cross_module_constants: Option<bool>,
     /// Devtool option for the segment explorer.
     devtool_segment_explorer: Option<bool>,
     /// Whether to report inlined system environment variables as warnings or errors.
@@ -2537,6 +2539,15 @@ impl NextConfig {
     #[turbo_tasks::function]
     pub fn turbopack_cjs_tree_shaking(&self) -> Vc<bool> {
         Vc::cell(self.experimental.turbopack_cjs_tree_shaking.unwrap_or(true))
+    }
+
+    #[turbo_tasks::function]
+    pub fn turbopack_cross_module_constants(&self) -> Vc<bool> {
+        Vc::cell(
+            self.experimental
+                .turbopack_cross_module_constants
+                .unwrap_or(false),
+        )
     }
 
     #[turbo_tasks::function]

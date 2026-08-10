@@ -371,6 +371,7 @@ pub async fn get_client_module_options_context(
             source_maps,
             infer_module_side_effects: *next_config.turbopack_infer_module_side_effects().await?,
             cjs_tree_shaking: *next_config.turbopack_cjs_tree_shaking().await?,
+            cross_module_constants: *next_config.turbopack_cross_module_constants().await?,
             preset_env_config,
             ..Default::default()
         },
