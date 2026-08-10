@@ -16,7 +16,8 @@ export class DevAppPageRouteMatcherProvider extends FileCacheRouteMatcherProvide
     appDir: string,
     extensions: ReadonlyArray<string>,
     reader: FileReader,
-    isTurbopack: boolean
+    isTurbopack: boolean,
+    private readonly pruneUnmatchedParallelRoutes = false
   ) {
     super(appDir, reader)
 
@@ -71,7 +72,11 @@ export class DevAppPageRouteMatcherProvider extends FileCacheRouteMatcherProvide
       else appPaths[pathname] = [page]
     }
 
-    normalizeCatchAllRoutes(appPaths)
+    normalizeCatchAllRoutes(
+      appPaths,
+      undefined,
+      this.pruneUnmatchedParallelRoutes
+    )
 
     // Make sure to sort parallel routes to make the result deterministic.
     appPaths = Object.fromEntries(
@@ -86,6 +91,8 @@ export class DevAppPageRouteMatcherProvider extends FileCacheRouteMatcherProvide
         throw new Error('Invariant: expected filename to exist in cache')
       }
       const { pathname, page, bundlePath } = cached
+
+      if (!(pathname in appPaths)) continue
 
       matchers.push(
         new AppPageRouteMatcher({

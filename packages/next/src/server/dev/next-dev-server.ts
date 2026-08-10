@@ -333,7 +333,8 @@ export default class DevServer extends Server {
           appDir,
           extensions,
           fileReader,
-          isTurbopack
+          isTurbopack,
+          this.nextConfig.experimental.pruneUnmatchedParallelRoutes
         )
       )
       matchers.push(

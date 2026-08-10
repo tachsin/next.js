@@ -1304,6 +1304,12 @@ export interface ExperimentalConfig {
   globalNotFound?: boolean
 
   /**
+   * Omits catch-all-derived parallel routes that can only render the built-in
+   * not-found fallback because another slot has no matching page or default.
+   */
+  pruneUnmatchedParallelRoutes?: boolean
+
+  /**
    * @experimental Use the Rust port of the React compiler (Turbopack only).
    * Requires `reactCompiler` to be enabled.
    */
@@ -2243,6 +2249,7 @@ export const defaultConfig = Object.freeze({
     useCache: undefined,
     slowModuleDetection: undefined,
     globalNotFound: false,
+    pruneUnmatchedParallelRoutes: false,
     browserDebugInfoInTerminal: 'warn',
     lockDistDir: true,
     proxyClientMaxBodySize: 10_485_760, // 10MB

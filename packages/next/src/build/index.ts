@@ -1467,6 +1467,7 @@ export default async function build(
 
       NextBuildContext.mappedPages = discovery.mappedPages || {}
       NextBuildContext.mappedAppPages = discovery.mappedAppPages
+      NextBuildContext.mappedAppDefaults = discovery.mappedAppDefaults
       NextBuildContext.mappedRootPaths = await nextBuildSpan
         .traceChild('create-root-mapping')
         .traceAsyncFn(() =>
@@ -2177,9 +2178,19 @@ export default async function build(
         const appPathsManifest = await readManifest<Record<string, string>>(
           path.join(distDir, SERVER_DIRECTORY, APP_PATHS_MANIFEST)
         )
+        const compiledAppPaths = new Set<string>()
 
         for (const key in appPathsManifest) {
-          appPathRoutes[key] = normalizeAppPath(key)
+          const appPath = normalizeAppPath(key)
+          appPathRoutes[key] = appPath
+          compiledAppPaths.add(appPath)
+        }
+
+        if (config.experimental.pruneUnmatchedParallelRoutes && pageKeys.app) {
+          const retainedAppPaths = pageKeys.app.filter((appPath) =>
+            compiledAppPaths.has(appPath)
+          )
+          pageKeys.app = retainedAppPaths.length ? retainedAppPaths : undefined
         }
 
         await writeManifest(

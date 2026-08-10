@@ -392,6 +392,7 @@ export interface RouteDiscoveryResult {
   pageApiRoutes: RouteInfo[]
   mappedAppPages?: MappedPages
   mappedAppLayouts?: MappedPages
+  mappedAppDefaults?: MappedPages
   mappedPages?: MappedPages
   /** Raw page file paths (post-filtering), useful for telemetry */
   pagesPaths: string[]
@@ -482,6 +483,7 @@ export async function discoverRoutes(
   let slots: SlotInfo[] = []
   let mappedAppPages: MappedPages | undefined
   let mappedAppLayouts: MappedPages | undefined
+  let mappedAppDefaults: MappedPages | undefined
 
   if (appDir) {
     let appPaths: string[]
@@ -505,19 +507,16 @@ export async function discoverRoutes(
     }
 
     // Map all app file types in parallel
-    let mappedDefaultFiles: MappedPages
-    ;[mappedAppPages, mappedAppLayouts, mappedDefaultFiles] = await Promise.all(
-      [
-        mapPaths(appPaths, PAGE_TYPES.APP),
-        mapPaths(layoutPaths, PAGE_TYPES.APP),
-        mapPaths(defaultPaths, PAGE_TYPES.APP),
-      ]
-    )
+    ;[mappedAppPages, mappedAppLayouts, mappedAppDefaults] = await Promise.all([
+      mapPaths(appPaths, PAGE_TYPES.APP),
+      mapPaths(layoutPaths, PAGE_TYPES.APP),
+      mapPaths(defaultPaths, PAGE_TYPES.APP),
+    ])
 
     // Extract slots from pages and default files
     slots = combineSlots(
       extractSlotsFromRoutes(mappedAppPages, SKIP_ROUTES),
-      extractSlotsFromRoutes(mappedDefaultFiles)
+      extractSlotsFromRoutes(mappedAppDefaults)
     )
 
     // Process routes
@@ -539,6 +538,7 @@ export async function discoverRoutes(
     pageApiRoutes,
     mappedAppPages,
     mappedAppLayouts,
+    mappedAppDefaults,
     mappedPages,
     pagesPaths,
     appDirOnly,

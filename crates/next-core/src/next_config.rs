@@ -1422,6 +1422,9 @@ pub struct ExperimentalConfig {
     turbopack_local_postcss_config: Option<bool>,
     // Whether to enable the global-not-found convention
     global_not_found: Option<bool>,
+    /// Omit catch-all-derived parallel routes that can only render the built-in not-found
+    /// fallback because another slot has no matching page or default.
+    prune_unmatched_parallel_routes: Option<bool>,
     /// Experimental Rust React compiler (Turbopack only); requires `reactCompiler`.
     turbopack_rust_react_compiler: Option<bool>,
     /// Defaults to false in development mode, true in production mode.
@@ -1962,6 +1965,15 @@ impl NextConfig {
     #[turbo_tasks::function]
     pub fn is_global_not_found_enabled(&self) -> Vc<bool> {
         Vc::cell(self.experimental.global_not_found.unwrap_or_default())
+    }
+
+    #[turbo_tasks::function]
+    pub fn prune_unmatched_parallel_routes(&self) -> Vc<bool> {
+        Vc::cell(
+            self.experimental
+                .prune_unmatched_parallel_routes
+                .unwrap_or_default(),
+        )
     }
 
     #[turbo_tasks::function]
