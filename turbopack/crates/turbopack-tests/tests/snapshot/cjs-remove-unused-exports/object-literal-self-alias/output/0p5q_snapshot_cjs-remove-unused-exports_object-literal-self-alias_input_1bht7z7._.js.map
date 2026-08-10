@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["turbopack:///[project]/turbopack/crates/turbopack-tests/tests/snapshot/cjs-remove-unused-exports/object-literal-self-alias/input/index.js"],"sourcesContent":["import { used } from './lib.js'\n\nconsole.log(used())\n"],"names":["console","log"],"mappings":"AAAA;;AAEAA,QAAQC,GAAG,CAAC,IAAA,4PAAI"}},
+    {"offset": {"line": 11, "column": 0}, "map": {"version":3,"sources":["turbopack:///[project]/turbopack/crates/turbopack-tests/tests/snapshot/cjs-remove-unused-exports/object-literal-self-alias/input/lib.js"],"sourcesContent":["// The `module.exports = { … }` literal is aliased by a local binding, which the\n// module reads its own exports back through. Nothing may be dropped, even though\n// `helper` has no importer.\nconst Self = (module.exports = {\n  used: function () {\n    return Self.helper()\n  },\n  helper: function () {\n    return 'helper'\n  },\n})\n"],"names":["Self","module","exports","used","helper"],"mappings":"AAAA,gFAAgF;AAChF,iFAAiF;AACjF,4BAA4B;AAC5B,MAAMA,OAAQC,OAAOC,OAAO,GAAG;IAC7BC,MAAM;QACJ,OAAOH,KAAKI,MAAM;IACpB;IACAA,QAAQ;QACN,OAAO;IACT;AACF"}}]
+}
