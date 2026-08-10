@@ -414,7 +414,7 @@ export function trackPromiseUsed<T>(promise: Promise<T>, onUse: () => void) {
 export const RENDER_STAGES_BY_DATA_KIND = {
   sessionData: RenderStage.ShellRuntime as const,
   staticLinkData: RenderStage.Static as const,
-  runtimeLinkData: RenderStage.Runtime as const,
+  runtimeLinkData: RenderStage.PrefetchRuntime as const,
 }
 
 export function applyOwnerStack(error: Error): Error {
