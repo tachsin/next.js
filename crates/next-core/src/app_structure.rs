@@ -475,6 +475,10 @@ pub struct AppPageLoaderTree {
     /// exist at the same URL path level. Used by the client router to determine
     /// if a prefetch can be reused.
     pub static_siblings: Vec<RcStr>,
+    /// Whether this is the fallback for an implicit children slot that has no routes in the
+    /// filesystem. The fallback preserves the loader tree shape but does not make the slot
+    /// required by a layout.
+    pub is_implicit_children_fallback: bool,
 }
 
 impl AppPageLoaderTree {
@@ -518,7 +522,8 @@ impl AppPageLoaderTree {
     }
 
     fn is_builtin_not_found_default(&self, builtin_default: &FileSystemPath) -> bool {
-        &*self.segment == "__DEFAULT__"
+        !self.is_implicit_children_fallback
+            && &*self.segment == "__DEFAULT__"
             && self.modules.default.as_ref().is_some_and(|default| {
                 default.fs == builtin_default.fs && default.path == builtin_default.path
             })
@@ -1055,6 +1060,33 @@ fn has_child_routes(directory_tree: &PlainDirectoryTree) -> bool {
     false
 }
 
+fn contains_page_or_default(directory_tree: &PlainDirectoryTree) -> bool {
+    directory_tree.modules.page.is_some()
+        || directory_tree.modules.default.is_some()
+        || directory_tree
+            .subdirectories
+            .values()
+            .any(contains_page_or_default)
+}
+
+/// Returns whether the filesystem declares an implicit children slot at this level.
+fn has_declared_children_slot(directory_tree: &PlainDirectoryTree) -> bool {
+    directory_tree.modules.page.is_some()
+        || directory_tree.modules.default.is_some()
+        || directory_tree
+            .subdirectories
+            .iter()
+            .any(|(name, subdirectory)| {
+                if is_parallel_route(name) {
+                    false
+                } else if is_group_route(name) {
+                    has_declared_children_slot(subdirectory)
+                } else {
+                    contains_page_or_default(subdirectory)
+                }
+            })
+}
+
 async fn check_duplicate(
     duplicate: &mut FxHashMap<AppPath, AppPage>,
     loader_tree: &AppPageLoaderTree,
@@ -1301,6 +1333,7 @@ async fn directory_tree_to_loader_tree_internal(
         modules: modules.without_leaves(),
         global_metadata: global_metadata.to_resolved().await?,
         static_siblings,
+        is_implicit_children_fallback: false,
     };
 
     let current_level_is_parallel_route = is_parallel_route(&directory_name);
@@ -1326,6 +1359,7 @@ async fn directory_tree_to_loader_tree_internal(
                 },
                 global_metadata: global_metadata.to_resolved().await?,
                 static_siblings: Vec::new(),
+                is_implicit_children_fallback: false,
             },
         );
     }
@@ -1516,18 +1550,17 @@ async fn directory_tree_to_loader_tree_internal(
             return Ok(None);
         }
     } else if tree.parallel_routes.get("children").is_none() {
-        tree.parallel_routes.insert(
+        let mut fallback = default_route_tree(
+            app_dir.clone(),
+            global_metadata,
+            app_page.clone(),
+            modules.default.clone(),
             rcstr!("children"),
-            default_route_tree(
-                app_dir.clone(),
-                global_metadata,
-                app_page.clone(),
-                modules.default.clone(),
-                rcstr!("children"),
-                for_app_path.clone(),
-            )
-            .await?,
-        );
+            for_app_path.clone(),
+        )
+        .await?;
+        fallback.is_implicit_children_fallback = !has_declared_children_slot(directory_tree);
+        tree.parallel_routes.insert(rcstr!("children"), fallback);
     }
 
     if tree.parallel_routes.len() > 1
@@ -1574,6 +1607,7 @@ async fn default_route_tree(
         },
         global_metadata: global_metadata.to_resolved().await?,
         static_siblings: Vec::new(),
+        is_implicit_children_fallback: false,
     })
 }
 
@@ -1830,6 +1864,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                             },
                             global_metadata,
                             static_siblings: Vec::new(),
+                            is_implicit_children_fallback: false,
                         }
                     },
                     modules: AppDirModules {
@@ -1837,6 +1872,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                     },
                     global_metadata,
                     static_siblings: Vec::new(),
+                    is_implicit_children_fallback: false,
                 },
             },
             modules: AppDirModules {
@@ -1860,6 +1896,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
             },
             global_metadata,
             static_siblings: Vec::new(),
+            is_implicit_children_fallback: false,
         }
         .resolved_cell();
 
@@ -1900,6 +1937,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                         },
                         global_metadata,
                         static_siblings: Vec::new(),
+                        is_implicit_children_fallback: false,
                     }
                 },
                 // global-error is needed for getGlobalErrorStyles to work during rendering.
@@ -1910,6 +1948,7 @@ async fn directory_tree_to_entrypoints_internal_untraced(
                 },
                 global_metadata,
                 static_siblings: Vec::new(),
+                is_implicit_children_fallback: false,
             }
             .resolved_cell();
 

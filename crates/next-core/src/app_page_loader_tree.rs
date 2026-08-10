@@ -340,6 +340,7 @@ impl AppPageLoaderTreeBuilder {
             modules,
             global_metadata,
             static_siblings,
+            is_implicit_children_fallback: _,
         } = loader_tree;
 
         writeln!(
